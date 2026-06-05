@@ -1,0 +1,18 @@
+<view wx:for="{{reviews}}" wx:key="id" class="card review-card">
+  <view class="header-row">
+    <image src="{{item.avatar_url || '/assets/default-avatar.png'}}" class="avatar" />
+    <text class="nickname">{{item.nickname}}</text>
+    <text class="stars">{{item.rating}}★</text>
+    <text class="date">{{item.created_at.slice(0,10)}}</text>
+  </view>
+  <text class="content">{{item.content}}</text>
+  <scroll-view scroll-x class="img-row">
+    <image wx:for="{{item.images}}" wx:for-item="img" wx:key="*this" src="{{img}}" class="review-img" mode="aspectFill" />
+  </scroll-view>
+  <view wx:if="{{item.reply}}" class="reply">已回复：{{item.reply}}</view>
+  <view wx:else class="reply-box">
+    <input class="reply-input" placeholder="回复此评价..." value="{{replyDraft[item.id] || ''}}" bindinput="onReplyInput" data-id="{{item.id}}" />
+    <button class="btn-primary reply-btn" bindtap="onReply" data-id="{{item.id}}">回复</button>
+  </view>
+</view>
+<view wx:if="{{reviews.length === 0}}" class="empty">暂无评价</view>

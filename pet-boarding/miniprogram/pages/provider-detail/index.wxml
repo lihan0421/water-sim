@@ -1,0 +1,38 @@
+<view wx:if="{{provider}}">
+  <swiper class="banner" indicator-dots autoplay>
+    <swiper-item wx:for="{{provider.images || []}}" wx:key="*this">
+      <image src="{{item}}" mode="aspectFill" class="banner-img" />
+    </swiper-item>
+    <swiper-item wx:if="{{!provider.images || provider.images.length === 0}}">
+      <image src="/assets/default-shop.png" mode="aspectFill" class="banner-img" />
+    </swiper-item>
+  </swiper>
+  <view class="card">
+    <text class="shop-name">{{provider.shop_name}}</text>
+    <view class="row">
+      <text class="price">¥{{provider.price_per_day}}/天</text>
+      <text class="rating">★ {{provider.avg_rating > 0 ? provider.avg_rating.toFixed(1) : '暂无评分'}}</text>
+    </view>
+    <text class="addr">📍 {{provider.address}}</text>
+    <text class="desc">{{provider.description}}</text>
+  </view>
+  <view class="card">
+    <text class="section-title">评价 ({{reviews.length}})</text>
+    <view wx:for="{{reviews}}" wx:key="id" class="review-item">
+      <view class="review-header">
+        <image src="{{item.avatar_url || '/assets/default-avatar.png'}}" class="avatar" />
+        <text class="nickname">{{item.nickname}}</text>
+        <text class="stars">{{item.rating}}★</text>
+      </view>
+      <text class="review-content">{{item.content}}</text>
+      <scroll-view scroll-x class="img-row">
+        <image wx:for="{{item.images}}" wx:for-item="img" wx:key="*this" src="{{img}}" class="review-img" mode="aspectFill" bindtap="previewImg" data-src="{{img}}" data-list="{{item.images}}" />
+      </scroll-view>
+      <view wx:if="{{item.reply}}" class="reply">店家回复：{{item.reply}}</view>
+    </view>
+    <view wx:if="{{reviews.length === 0}}" class="empty">暂无评价</view>
+  </view>
+  <view class="bottom-bar">
+    <button class="btn-primary book-btn" bindtap="goBook">立即预约</button>
+  </view>
+</view>

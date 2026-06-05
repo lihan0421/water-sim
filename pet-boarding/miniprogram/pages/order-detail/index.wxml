@@ -1,0 +1,17 @@
+<view wx:if="{{order}}" class="container">
+  <view class="card">
+    <view class="row">
+      <text class="shop">{{order.shop_name}}</text>
+      <text class="tag tag-{{order.status}}">{{statusMap[order.status]}}</text>
+    </view>
+    <view class="info-row"><text class="label">地址</text><text>{{order.address}}</text></view>
+    <view class="info-row"><text class="label">宠物</text><text>{{order.pet_name}}（{{order.pet_species}} · {{order.pet_breed}}）</text></view>
+    <view class="info-row"><text class="label">日期</text><text>{{order.start_date}} ~ {{order.end_date}}</text></view>
+    <view class="info-row"><text class="label">费用</text><text class="price">¥{{order.total_price}}</text></view>
+    <view class="info-row" wx:if="{{order.note}}"><text class="label">备注</text><text>{{order.note}}</text></view>
+  </view>
+  <view class="btn-group">
+    <button wx:if="{{order.status==='pending'||order.status==='confirmed'}}" class="btn-outline cancel-btn" bindtap="onCancel">取消预约</button>
+    <button wx:if="{{order.status==='completed'}}" class="btn-primary review-btn" bindtap="goReview">写评价</button>
+  </view>
+</view>

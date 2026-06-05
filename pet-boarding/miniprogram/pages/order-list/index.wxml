@@ -1,0 +1,12 @@
+<view class="tabs">
+  <view wx:for="{{tabs}}" wx:key="*this" class="tab {{activeTab === index ? 'active' : ''}}" bindtap="switchTab" data-idx="{{index}}">{{item}}</view>
+</view>
+<view wx:for="{{filtered}}" wx:key="id" class="card order-card" bindtap="goDetail" data-id="{{item.id}}">
+  <view class="row">
+    <text class="shop">{{item.shop_name || item.user_nickname}}</text>
+    <text class="tag tag-{{item.status}}">{{statusMap[item.status]}}</text>
+  </view>
+  <text class="pet">🐾 {{item.pet_name}} · {{item.start_date}} ~ {{item.end_date}}</text>
+  <text class="price">¥{{item.total_price}}</text>
+</view>
+<view wx:if="{{filtered.length === 0}}" class="empty">暂无订单</view>

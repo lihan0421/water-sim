@@ -1,0 +1,5 @@
+.pet-list { padding: 16rpx; padding-bottom: 160rpx; }
+.pet-name { font-size: 32rpx; font-weight: bold; display: block; margin-bottom: 8rpx; }
+.pet-info { font-size: 26rpx; color: #666; }
+.empty { text-align: center; color: #ccc; padding: 80rpx; }
+.add-btn { position: fixed; bottom: 40rpx; left: 40rpx; right: 40rpx; height: 96rpx; line-height: 96rpx; font-size: 32rpx; }

@@ -1,0 +1,33 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/index/index",
+    "pages/provider-list/index",
+    "pages/provider-detail/index",
+    "pages/order-create/index",
+    "pages/order-list/index",
+    "pages/order-detail/index",
+    "pages/review-create/index",
+    "pages/profile/index",
+    "pages/pet-list/index",
+    "pages/pet-edit/index",
+    "pages/shop-edit/index",
+    "pages/provider-orders/index",
+    "pages/provider-reviews/index"
+  ],
+  "tabBar": {
+    "color": "#999",
+    "selectedColor": "#FF6B35",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "首页", "iconPath": "assets/home.png", "selectedIconPath": "assets/home-active.png" },
+      { "pagePath": "pages/order-list/index", "text": "订单", "iconPath": "assets/order.png", "selectedIconPath": "assets/order-active.png" },
+      { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "assets/profile.png", "selectedIconPath": "assets/profile-active.png" }
+    ]
+  },
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#FF6B35",
+    "navigationBarTitleText": "宠物寄养",
+    "navigationBarTextStyle": "white"
+  }
+}

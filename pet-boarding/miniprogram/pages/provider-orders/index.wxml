@@ -1,0 +1,18 @@
+<view class="tabs">
+  <view wx:for="{{tabs}}" wx:key="*this" class="tab {{activeTab === index ? 'active' : ''}}" bindtap="switchTab" data-idx="{{index}}">{{item}}</view>
+</view>
+<view wx:for="{{filtered}}" wx:key="id" class="card order-card">
+  <view class="row">
+    <text class="user">{{item.user_nickname}}</text>
+    <text class="tag tag-{{item.status}}">{{statusMap[item.status]}}</text>
+  </view>
+  <text class="pet-info">🐾 {{item.pet_name}}({{item.pet_species}}) · {{item.start_date}} ~ {{item.end_date}}</text>
+  <text class="price">¥{{item.total_price}}</text>
+  <view class="action-row">
+    <button wx:if="{{item.status === 'pending'}}" class="btn-primary action-btn" bindtap="updateStatus" data-id="{{item.id}}" data-status="confirmed">确认接单</button>
+    <button wx:if="{{item.status === 'confirmed'}}" class="btn-primary action-btn" bindtap="updateStatus" data-id="{{item.id}}" data-status="ongoing">开始寄养</button>
+    <button wx:if="{{item.status === 'ongoing'}}" class="btn-primary action-btn" bindtap="updateStatus" data-id="{{item.id}}" data-status="completed">完成寄养</button>
+    <button wx:if="{{item.status === 'pending' || item.status === 'confirmed'}}" class="btn-outline action-btn" bindtap="updateStatus" data-id="{{item.id}}" data-status="cancelled">拒绝/取消</button>
+  </view>
+</view>
+<view wx:if="{{filtered.length === 0}}" class="empty">暂无订单</view>

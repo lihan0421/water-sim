@@ -1,0 +1,14 @@
+.review-card { margin: 16rpx; }
+.header-row { display: flex; align-items: center; gap: 12rpx; margin-bottom: 12rpx; }
+.avatar { width: 64rpx; height: 64rpx; border-radius: 50%; }
+.nickname { font-size: 28rpx; flex: 1; }
+.stars { color: #faad14; }
+.date { font-size: 22rpx; color: #ccc; }
+.content { font-size: 28rpx; color: #555; display: block; margin-bottom: 8rpx; }
+.img-row { white-space: nowrap; margin-bottom: 12rpx; }
+.review-img { width: 150rpx; height: 150rpx; border-radius: 8rpx; margin-right: 8rpx; display: inline-block; }
+.reply { background: #f9f9f9; padding: 8rpx 16rpx; border-radius: 6rpx; font-size: 26rpx; color: #888; }
+.reply-box { margin-top: 8rpx; }
+.reply-input { background: #f5f5f5; padding: 12rpx 16rpx; border-radius: 8rpx; font-size: 26rpx; }
+.reply-btn { height: 64rpx; line-height: 64rpx; font-size: 26rpx; margin-top: 8rpx; }
+.empty { text-align: center; color: #ccc; padding: 80rpx; }

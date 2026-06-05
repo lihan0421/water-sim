@@ -1,0 +1,21 @@
+.banner { height: 400rpx; }
+.banner-img { width: 100%; height: 400rpx; }
+.shop-name { font-size: 36rpx; font-weight: bold; display: block; margin-bottom: 12rpx; }
+.row { display: flex; justify-content: space-between; margin-bottom: 8rpx; }
+.price { color: #FF6B35; font-size: 32rpx; font-weight: bold; }
+.rating { color: #faad14; }
+.addr { color: #999; font-size: 26rpx; display: block; margin: 8rpx 0; }
+.desc { color: #555; font-size: 28rpx; display: block; margin-top: 8rpx; }
+.section-title { font-size: 30rpx; font-weight: bold; display: block; margin-bottom: 20rpx; }
+.review-item { border-bottom: 1rpx solid #f0f0f0; padding: 16rpx 0; }
+.review-header { display: flex; align-items: center; gap: 12rpx; margin-bottom: 8rpx; }
+.avatar { width: 60rpx; height: 60rpx; border-radius: 50%; }
+.nickname { font-size: 26rpx; color: #333; flex: 1; }
+.stars { color: #faad14; }
+.review-content { font-size: 28rpx; color: #555; }
+.img-row { white-space: nowrap; margin-top: 8rpx; }
+.review-img { width: 160rpx; height: 160rpx; margin-right: 8rpx; border-radius: 6rpx; display: inline-block; }
+.reply { background: #f9f9f9; padding: 8rpx 16rpx; border-radius: 6rpx; color: #888; font-size: 26rpx; margin-top: 8rpx; }
+.empty { text-align: center; color: #ccc; padding: 40rpx; }
+.bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; padding: 20rpx 40rpx; box-shadow: 0 -2rpx 8rpx rgba(0,0,0,0.08); padding-bottom: calc(20rpx + env(safe-area-inset-bottom)); }
+.book-btn { width: 100%; height: 88rpx; line-height: 88rpx; font-size: 32rpx; }

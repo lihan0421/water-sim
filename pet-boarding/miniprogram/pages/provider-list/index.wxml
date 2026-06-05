@@ -1,0 +1,25 @@
+<view class="filter-bar">
+  <view class="filter-row">
+    <picker range="{{speciesOptions}}" bindchange="onSpeciesChange">
+      <view class="filter-chip">{{speciesOptions[speciesIndex]}} ▾</view>
+    </picker>
+    <picker range="{{sortOptions}}" bindchange="onSortChange">
+      <view class="filter-chip">{{sortOptions[sortIndex]}} ▾</view>
+    </picker>
+  </view>
+</view>
+<view wx:if="{{loading}}" class="loading">加载中...</view>
+<view wx:else>
+  <view wx:for="{{providers}}" wx:key="id" class="card provider-card" bindtap="goDetail" data-id="{{item.id}}">
+    <image class="shop-img" src="{{item.images && item.images[0] || '/assets/default-shop.png'}}" mode="aspectFill" />
+    <view class="info">
+      <text class="shop-name">{{item.shop_name}}</text>
+      <text class="address">{{item.address}}</text>
+      <view class="row">
+        <text class="price">¥{{item.price_per_day}}/天</text>
+        <text class="rating">★ {{item.avg_rating > 0 ? item.avg_rating.toFixed(1) : '暂无评分'}}</text>
+      </view>
+    </view>
+  </view>
+  <view wx:if="{{providers.length === 0}}" class="empty">暂无服务商</view>
+</view>

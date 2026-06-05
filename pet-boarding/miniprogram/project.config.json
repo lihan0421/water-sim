@@ -1,0 +1,13 @@
+{
+  "appid": "your_appid_here",
+  "compileType": "miniprogram",
+  "libVersion": "3.3.4",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true
+  },
+  "projectname": "pet-boarding"
+}

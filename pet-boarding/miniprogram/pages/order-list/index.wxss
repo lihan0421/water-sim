@@ -1,0 +1,9 @@
+.tabs { display: flex; background: #fff; border-bottom: 1rpx solid #f0f0f0; }
+.tab { flex: 1; text-align: center; padding: 24rpx 0; font-size: 28rpx; color: #666; }
+.tab.active { color: #FF6B35; border-bottom: 4rpx solid #FF6B35; }
+.order-card { margin: 16rpx; }
+.row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8rpx; }
+.shop { font-size: 30rpx; font-weight: bold; }
+.pet { font-size: 26rpx; color: #666; display: block; margin-bottom: 6rpx; }
+.price { color: #FF6B35; font-size: 28rpx; font-weight: bold; }
+.empty { text-align: center; color: #ccc; padding: 80rpx; }

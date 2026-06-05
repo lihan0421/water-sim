@@ -1,0 +1,8 @@
+.container { padding-bottom: 120rpx; }
+.row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12rpx; }
+.shop { font-size: 32rpx; font-weight: bold; }
+.info-row { display: flex; gap: 16rpx; margin-bottom: 12rpx; font-size: 28rpx; }
+.label { color: #999; width: 80rpx; flex-shrink: 0; }
+.price { color: #FF6B35; font-weight: bold; }
+.btn-group { display: flex; gap: 20rpx; padding: 0 24rpx; margin-top: 8rpx; }
+.cancel-btn, .review-btn { flex: 1; height: 88rpx; line-height: 88rpx; font-size: 30rpx; }

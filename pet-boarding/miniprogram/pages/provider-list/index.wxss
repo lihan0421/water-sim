@@ -1,0 +1,12 @@
+.filter-bar { background: #fff; padding: 16rpx 24rpx; border-bottom: 1rpx solid #f0f0f0; }
+.filter-row { display: flex; gap: 16rpx; }
+.filter-chip { background: #f5f5f5; padding: 10rpx 24rpx; border-radius: 30rpx; font-size: 26rpx; color: #333; }
+.provider-card { display: flex; gap: 20rpx; align-items: flex-start; }
+.shop-img { width: 160rpx; height: 160rpx; border-radius: 8rpx; flex-shrink: 0; }
+.info { flex: 1; }
+.shop-name { font-size: 32rpx; font-weight: bold; color: #333; display: block; }
+.address { font-size: 26rpx; color: #999; display: block; margin: 6rpx 0; }
+.row { display: flex; justify-content: space-between; margin-top: 8rpx; }
+.price { color: #FF6B35; font-size: 28rpx; font-weight: bold; }
+.rating { color: #faad14; font-size: 26rpx; }
+.loading, .empty { text-align: center; color: #999; padding: 80rpx; }

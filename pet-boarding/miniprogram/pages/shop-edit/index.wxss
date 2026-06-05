@@ -1,0 +1,10 @@
+.form { margin: 24rpx; }
+.field { margin-bottom: 28rpx; }
+.label { font-size: 26rpx; color: #666; display: block; margin-bottom: 8rpx; }
+.input { background: #f5f5f5; padding: 16rpx 20rpx; border-radius: 8rpx; font-size: 28rpx; width: 100%; box-sizing: border-box; }
+.textarea { background: #f5f5f5; padding: 16rpx 20rpx; border-radius: 8rpx; width: 100%; min-height: 120rpx; font-size: 28rpx; box-sizing: border-box; }
+.check-row { display: flex; gap: 16rpx; }
+.check-item { padding: 10rpx 28rpx; border-radius: 30rpx; border: 1rpx solid #ddd; font-size: 28rpx; color: #666; }
+.check-item.checked { background: #FF6B35; color: #fff; border-color: #FF6B35; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; }
+.submit-btn { width: 100%; height: 96rpx; line-height: 96rpx; font-size: 32rpx; }

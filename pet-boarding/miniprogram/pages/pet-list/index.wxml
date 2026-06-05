@@ -1,0 +1,8 @@
+<view class="pet-list">
+  <view wx:for="{{pets}}" wx:key="id" class="card pet-card" bindtap="goEdit" data-id="{{item.id}}">
+    <text class="pet-name">{{item.name}}</text>
+    <text class="pet-info">{{item.species}} · {{item.breed || '未知品种'}} · {{item.age}}岁 · {{item.weight}}kg</text>
+  </view>
+  <view wx:if="{{pets.length === 0}}" class="empty">还没有添加宠物</view>
+</view>
+<button class="btn-primary add-btn" bindtap="goAdd">+ 添加宠物</button>

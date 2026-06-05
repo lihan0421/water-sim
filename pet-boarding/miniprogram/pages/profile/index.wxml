@@ -1,0 +1,27 @@
+<view class="header">
+  <image class="avatar" src="{{userInfo.avatarUrl || '/assets/default-avatar.png'}}" />
+  <view class="user-info">
+    <text class="nickname">{{userInfo.nickname}}</text>
+    <text class="role-tag">{{userInfo.role === 'provider' ? '服务商' : '宠物主人'}}</text>
+  </view>
+</view>
+<view class="menu-list">
+  <view class="menu-item" bindtap="goPets">
+    <text>我的宠物</text><text class="arrow">›</text>
+  </view>
+  <view wx:if="{{userInfo.role === 'provider'}}" class="menu-item" bindtap="goShopEdit">
+    <text>管理店铺</text><text class="arrow">›</text>
+  </view>
+  <view wx:if="{{userInfo.role === 'provider'}}" class="menu-item" bindtap="goProviderOrders">
+    <text>接单管理</text><text class="arrow">›</text>
+  </view>
+  <view wx:if="{{userInfo.role === 'provider'}}" class="menu-item" bindtap="goProviderReviews">
+    <text>店铺评价</text><text class="arrow">›</text>
+  </view>
+  <view wx:if="{{userInfo.role !== 'provider'}}" class="menu-item" bindtap="becomeProvider">
+    <text>成为服务商</text><text class="arrow">›</text>
+  </view>
+  <view class="menu-item logout" bindtap="onLogout">
+    <text>退出登录</text>
+  </view>
+</view>

@@ -1,0 +1,29 @@
+<view class="form card">
+  <view class="field">
+    <text class="label">选择宠物</text>
+    <picker range="{{petNames}}" bindchange="onPetChange">
+      <view class="picker-val">{{petNames[petIndex] || '请选择宠物'}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <text class="label">入住日期</text>
+    <picker mode="date" bindchange="onStartChange" value="{{startDate}}">
+      <view class="picker-val">{{startDate || '请选择'}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <text class="label">离开日期</text>
+    <picker mode="date" bindchange="onEndChange" value="{{endDate}}">
+      <view class="picker-val">{{endDate || '请选择'}}</view>
+    </picker>
+  </view>
+  <view class="field" wx:if="{{days > 0}}">
+    <text class="label">费用预估</text>
+    <text class="price-val">¥{{totalPrice}}（{{days}}天 × ¥{{pricePerDay}}/天）</text>
+  </view>
+  <view class="field">
+    <text class="label">备注</text>
+    <textarea class="textarea" placeholder="特殊需求、注意事项等" value="{{note}}" bindinput="onNoteInput" />
+  </view>
+  <button class="btn-primary submit-btn" bindtap="onSubmit" loading="{{loading}}">确认预约</button>
+</view>

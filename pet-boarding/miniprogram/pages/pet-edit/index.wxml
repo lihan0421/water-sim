@@ -1,0 +1,30 @@
+<view class="form card">
+  <view class="field">
+    <text class="label">名字</text>
+    <input class="input" value="{{name}}" bindinput="onNameInput" placeholder="宠物名字" />
+  </view>
+  <view class="field">
+    <text class="label">种类</text>
+    <picker range="{{speciesOptions}}" value="{{speciesIndex}}" bindchange="onSpeciesChange">
+      <view class="picker-val">{{speciesOptions[speciesIndex]}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <text class="label">品种</text>
+    <input class="input" value="{{breed}}" bindinput="onBreedInput" placeholder="如：金毛" />
+  </view>
+  <view class="field">
+    <text class="label">年龄（岁）</text>
+    <input class="input" type="number" value="{{age}}" bindinput="onAgeInput" placeholder="岁" />
+  </view>
+  <view class="field">
+    <text class="label">体重（kg）</text>
+    <input class="input" type="digit" value="{{weight}}" bindinput="onWeightInput" placeholder="kg" />
+  </view>
+  <view class="field">
+    <text class="label">备注</text>
+    <textarea class="textarea" value="{{notes}}" bindinput="onNotesInput" placeholder="特殊情况、饮食习惯等" />
+  </view>
+  <button class="btn-primary submit-btn" bindtap="onSave">保存</button>
+  <button wx:if="{{petId}}" class="btn-outline del-btn" bindtap="onDelete">删除宠物</button>
+</view>

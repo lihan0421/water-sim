@@ -1,0 +1,17 @@
+<view class="form card">
+  <text class="section-title">评分</text>
+  <view class="stars-row">
+    <text wx:for="{{[1,2,3,4,5]}}" wx:key="*this" class="star {{rating >= item ? 'active' : ''}}" bindtap="onRate" data-val="{{item}}">★</text>
+  </view>
+  <text class="section-title">评价内容</text>
+  <textarea class="textarea" placeholder="分享你的寄养体验..." value="{{content}}" bindinput="onContentInput" maxlength="500" />
+  <text class="section-title">上传图片（最多6张）</text>
+  <view class="img-list">
+    <view wx:for="{{images}}" wx:key="*this" class="img-wrap">
+      <image src="{{item}}" mode="aspectFill" class="preview-img" />
+      <text class="del-btn" bindtap="delImg" data-idx="{{index}}">×</text>
+    </view>
+    <view wx:if="{{images.length < 6}}" class="add-img-btn" bindtap="chooseImg">+</view>
+  </view>
+  <button class="btn-primary submit-btn" bindtap="onSubmit" loading="{{loading}}">提交评价</button>
+</view>

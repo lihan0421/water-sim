@@ -1,0 +1,6 @@
+<view class="container">
+  <image class="logo" src="/assets/logo.png" mode="aspectFit" />
+  <text class="title">宠物寄养平台</text>
+  <text class="subtitle">安心托付，放心出行</text>
+  <button class="btn-login btn-primary" bindtap="onLogin" loading="{{loading}}">微信一键登录</button>
+</view>

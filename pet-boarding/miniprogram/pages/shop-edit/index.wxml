@@ -1,0 +1,31 @@
+<view class="form card">
+  <view class="field">
+    <text class="label">店铺名称</text>
+    <input class="input" value="{{shopName}}" bindinput="onShopNameInput" placeholder="请输入店铺名称" />
+  </view>
+  <view class="field">
+    <text class="label">地址</text>
+    <input class="input" value="{{address}}" bindinput="onAddressInput" placeholder="请输入地址" />
+  </view>
+  <view class="field">
+    <text class="label">每日价格（¥）</text>
+    <input class="input" type="digit" value="{{pricePerDay}}" bindinput="onPriceInput" placeholder="0.00" />
+  </view>
+  <view class="field">
+    <text class="label">接受宠物种类</text>
+    <view class="check-row">
+      <view class="check-item {{acceptedSpecies.indexOf('dog') >= 0 ? 'checked' : ''}}" bindtap="toggleSpecies" data-val="dog">狗</view>
+      <view class="check-item {{acceptedSpecies.indexOf('cat') >= 0 ? 'checked' : ''}}" bindtap="toggleSpecies" data-val="cat">猫</view>
+      <view class="check-item {{acceptedSpecies.indexOf('other') >= 0 ? 'checked' : ''}}" bindtap="toggleSpecies" data-val="other">其他</view>
+    </view>
+  </view>
+  <view class="field">
+    <text class="label">店铺介绍</text>
+    <textarea class="textarea" value="{{description}}" bindinput="onDescInput" placeholder="介绍你的服务和环境..." />
+  </view>
+  <view class="field switch-row">
+    <text class="label">接受预约</text>
+    <switch checked="{{isAvailable}}" bindchange="onAvailableChange" color="#FF6B35" />
+  </view>
+  <button class="btn-primary submit-btn" bindtap="onSave">保存</button>
+</view>
