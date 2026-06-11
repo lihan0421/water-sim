@@ -64,6 +64,7 @@ export class App {
   }
 
   dispose() {
+    this.renderer.setAnimationLoop(null);
     removeEventListener('resize', this.onResize);
     this.fpsEl.remove();
     this.current?.dispose();
