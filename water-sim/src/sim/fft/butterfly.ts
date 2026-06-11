@@ -10,9 +10,12 @@ export function bitReverse(i: number, bits: number): number {
  * 蝶形查找表：stages × N 个条目，每条 4 float：
  * [twiddle.re, twiddle.im, indexA, indexB]
  * 任意 wing 统一公式 out[i] = in[A] + W·in[B]（逆变换 W = e^{+2πik/N}）。
+ *
+ * 索引以 float32 存储（约 23 位尾数精度），N 必须 ≤ 8192 否则索引失真。
  */
 export function createButterflyData(N: number): Float32Array {
   const stages = Math.log2(N);
+  if (!Number.isInteger(stages) || N > 8192) throw new Error(`N must be a power of 2 and <= 8192, got ${N}`);
   const data = new Float32Array(stages * N * 4);
   for (let s = 0; s < stages; s++) {
     const span = 1 << s;            // 蝶形半宽
@@ -23,6 +26,7 @@ export function createButterflyData(N: number): Float32Array {
       const wi = Math.sin((2 * Math.PI * k) / N); // 逆变换取 +sin
       const top = i % seg < span;
       let a: number, b: number;
+      // stage 0 把 bit-reversal 置换内联进第一轮蝶形（省去单独的重排 pass）
       if (s === 0) { a = top ? bitReverse(i, stages) : bitReverse(i - 1, stages);
                      b = top ? bitReverse(i + 1, stages) : bitReverse(i, stages); }
       else         { a = top ? i : i - span;  b = top ? i + span : i; }
