@@ -10,7 +10,7 @@ export interface SceneContext {
 
 export interface WaterScene {
   readonly name: string;
-  init(ctx: SceneContext): Promise<void>;
+  init(ctx: SceneContext): Promise<void>;  // 场景负责设置相机初始位姿
   update(dt: number, time: number): void;   // 每帧：物理 + compute 调度
   readonly scene: THREE.Scene;              // 渲染用
   dispose(): void;                          // 释放 GPU 资源、移除事件监听

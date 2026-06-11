@@ -8,7 +8,7 @@ class PlaceholderScene implements WaterScene {
   private cube = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshNormalMaterial());
   async init(ctx: SceneContext) { this.scene.add(this.cube); ctx.camera.position.set(0, 1, 3); ctx.camera.lookAt(0, 0, 0); }
   update(dt: number) { this.cube.rotation.y += dt; }
-  dispose() { this.cube.geometry.dispose(); }
+  dispose() { this.cube.geometry.dispose(); (this.cube.material as THREE.Material).dispose(); }
 }
 
 async function boot() {

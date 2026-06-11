@@ -6,21 +6,24 @@ export class App {
   private renderer: THREE.WebGPURenderer;
   private camera: THREE.PerspectiveCamera;
   private gui = new GUI({ title: 'Water Sim' });
-  private sceneGui!: GUI;
+  private sceneGui: GUI | undefined;
   private current: WaterScene | null = null;
   private factories: Record<string, () => WaterScene>;
   private clock = new THREE.Clock();
   private fpsEl: HTMLDivElement;
+  private switching = false;
+  private readonly onResize: () => void;
 
   constructor(renderer: THREE.WebGPURenderer, factories: Record<string, () => WaterScene>) {
     this.renderer = renderer;
     this.factories = factories;
     this.camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 4000);
-    addEventListener('resize', () => {
+    this.onResize = () => {
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
-    });
+    };
+    addEventListener('resize', this.onResize);
     this.fpsEl = document.createElement('div');
     this.fpsEl.style.cssText = 'position:fixed;left:8px;top:8px;color:#0f0;font:12px monospace;z-index:9';
     document.body.appendChild(this.fpsEl);
@@ -30,12 +33,21 @@ export class App {
   }
 
   async switchTo(name: string) {
-    this.current?.dispose();
-    this.sceneGui?.destroy();
-    this.sceneGui = this.gui.addFolder(name);
-    this.current = this.factories[name]();
-    const ctx: SceneContext = { renderer: this.renderer, camera: this.camera, gui: this.sceneGui, domElement: this.renderer.domElement };
-    await this.current.init(ctx);
+    if (!this.factories[name]) return;
+    if (this.switching) return;
+    this.switching = true;
+    try {
+      this.current?.dispose();
+      this.current = null;
+      this.sceneGui?.destroy();
+      this.sceneGui = this.gui.addFolder(name);
+      const next = this.factories[name]();
+      const ctx: SceneContext = { renderer: this.renderer, camera: this.camera, gui: this.sceneGui, domElement: this.renderer.domElement };
+      await next.init(ctx);
+      this.current = next;
+    } finally {
+      this.switching = false;
+    }
   }
 
   start() {
@@ -49,5 +61,12 @@ export class App {
         this.renderer.render(this.current.scene, this.camera);
       }
     });
+  }
+
+  dispose() {
+    removeEventListener('resize', this.onResize);
+    this.fpsEl.remove();
+    this.current?.dispose();
+    this.gui.destroy();
   }
 }
