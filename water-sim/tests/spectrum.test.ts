@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { jonswap, peakOmega, generateInitialSpectrum } from '../src/sim/fft/spectrum';
+import { jonswap, peakOmega, directionalSpread, generateInitialSpectrum } from '../src/sim/fft/spectrum';
+
+describe('directionalSpread', () => {
+  it('顺风方向最大，逆风方向为背景值', () => {
+    expect(directionalSpread(0, 0)).toBeCloseTo((2 / Math.PI) * 0.98 + 0.02 / (2 * Math.PI), 6);
+    expect(directionalSpread(Math.PI, 0)).toBeCloseTo(0.02 / (2 * Math.PI), 6);
+  });
+  it('积分归一 ∫D dθ ≈ 1', () => {
+    const N = 10000;
+    let sum = 0;
+    for (let i = 0; i < N; i++) sum += directionalSpread(-Math.PI + (2 * Math.PI * i) / N, 0.3);
+    expect((sum * 2 * Math.PI) / N).toBeCloseTo(1.0, 3);
+  });
+});
 
 describe('jonswap', () => {
   const U = 10, F = 100_000; // 风速 m/s，风区 m
@@ -16,6 +29,13 @@ describe('jonswap', () => {
 });
 
 describe('generateInitialSpectrum', () => {
+  it('omega 色散关系正确', () => {
+    const N = 16, L = 100;
+    const { omega } = generateInitialSpectrum(N, L, { windSpeed: 10, windDirection: 0, fetch: 1e5, amplitudeScale: 1 }, () => 0.5);
+    const dk = (2 * Math.PI) / L;
+    expect(omega[8 * N + 8]).toBe(0); // k=0
+    expect(omega[8 * N + 9]).toBeCloseTo(Math.sqrt(9.81 * dk), 5); // kx=dk, kz=0
+  });
   it('输出尺寸正确且 k=0 处为零（无直流分量）', () => {
     const N = 16, L = 100;
     const { h0 } = generateInitialSpectrum(N, L, { windSpeed: 10, windDirection: 0, fetch: 1e5, amplitudeScale: 1 }, () => 0.5);

@@ -55,6 +55,7 @@ export function generateInitialSpectrum(
     const theta = Math.atan2(kz, kx);
     // S(k,θ) = S(ω)·D(θ)·dω/dk / k，dω/dk = g/(2ω)
     const Sk = (jonswap(w, p.windSpeed, p.fetch) * directionalSpread(theta, p.windDirection) * (G / (2 * w))) / k;
+    // Tessendorf (2001) Eq.4: |h̃₀(k)| = (1/√2)·ξ·√(2S)·Δk；(1/√2) 因子在调用处乘入
     return Math.sqrt(2 * Sk) * dk * p.amplitudeScale;
   };
   for (let iz = 0; iz < N; iz++) {
