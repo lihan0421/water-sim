@@ -5,15 +5,16 @@ import { RigidBody } from '../src/physics/RigidBody';
 import { Floater } from '../src/physics/Floater';
 
 describe('Floater', () => {
-  it('密度 0.5 的箱子在静水中平衡于半浸没', () => {
-    // 1m³ 箱子 500kg → 理论平衡：浸没 0.5m
+  it('密度 0.5 的箱子从偏离位置收敛到半浸没平衡', () => {
+    // 1m³ 箱子 500kg → 理论平衡：浸没 0.5m（质心 y=0）。
+    // 从 y=0.3 出发，必须经历下沉-振荡-阻尼收敛，而非静止在不动点上。
     const rb = new RigidBody(500, new Vector3(1, 1, 1));
-    rb.position.set(0, 0, 0); // 从水线开始
+    rb.position.set(0, 0.3, 0);
     const fl = new Floater(rb, {
       points: [new Vector3(-0.4, -0.5, -0.4), new Vector3(0.4, -0.5, -0.4), new Vector3(-0.4, -0.5, 0.4), new Vector3(0.4, -0.5, 0.4)],
       crossSectionArea: 1,   // 总水线面积 m²
       maxDraft: 1,           // 完全浸没深度
-      linearDrag: 4, angularDrag: 2,
+      linearDrag: 400, angularDrag: 2,
     });
     const still = () => 0; // 静水
     for (let i = 0; i < 1200; i++) { fl.applyForces(still, 1 / 60); rb.applyForce(new Vector3(0, -9.81 * 500, 0)); rb.step(1 / 60); }
