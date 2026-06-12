@@ -145,8 +145,8 @@ export class InteractiveWaves {
     let n = 0;
     for (let k = 0; k < this.pendingCount; k++) {
       const p = this.pending[k];
-      const gx = (p.x - this.origin.value.x) / this.dx + this.N / 2;
-      const gz = (p.z - this.origin.value.y) / this.dx + this.N / 2;
+      const gx = (p.x - this.origin.value.x) / this.dx + (this.N - 1) / 2;
+      const gz = (p.z - this.origin.value.y) / this.dx + (this.N - 1) / 2;
       if (gx < 1 || gx >= this.N - 1 || gz < 1 || gz >= this.N - 1) continue;
       (this.dPosU as any).array[n].set(gx, gz);
       (this.dValU as any).array[n].set(p.strength, Math.max(p.radius / this.dx, 1.5));
