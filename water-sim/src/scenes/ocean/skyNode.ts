@@ -1,7 +1,7 @@
 import { Fn, vec3, max, dot, normalize, mix } from 'three/tsl';
 
-// 太阳方向（归一化前的世界坐标）。天空背景与水面反射共用同一函数，保证一致光照。
-export const SUN_DIR = new Float32Array([0.4, 0.35, 0.6]);
+// 太阳方向（归一化前的世界坐标）。天空背景与水面高光必须共用此常量，保证一致光照。
+export const SUN_DIR = [0.4, 0.35, 0.6] as const;
 
 /** 程序化渐变天空：dir 为单位方向向量节点 → 天空颜色（含太阳盘 + 辉光）。 */
 export const skyColor = Fn(([dir]: any[]) => {

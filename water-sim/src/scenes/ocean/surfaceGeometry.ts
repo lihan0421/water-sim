@@ -9,5 +9,5 @@ export function createOceanGeometry(size = 512, res = 512) {
   inner.rotateX(-Math.PI / 2);
   const outer = new THREE.PlaneGeometry(size * 20, size * 20, 64, 64);
   outer.rotateX(-Math.PI / 2);
-  return { inner, outer };
+  return { inner, outer, cellSize: size / res }; // cellSize 供相机吸附跟随用
 }

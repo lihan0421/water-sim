@@ -3,7 +3,7 @@ import {
   Fn, texture, uniform, vec2, vec3, vec4, float, positionLocal, positionWorld,
   normalize, mix, max, dot, pow, reflect, cameraPosition, clamp,
 } from 'three/tsl';
-import { skyColor } from './skyNode';
+import { skyColor, SUN_DIR } from './skyNode';
 import type { FFTWaves } from '../../sim/fft/FFTWaves';
 
 // 交互波动层（Task 7）注入的高度/泡沫贴图。Task 6 仅 FFT，此处保留接口占位。
@@ -83,8 +83,8 @@ export function createWaterMaterial(o: WaterMaterialOpts) {
     // 体色：浪高处偏散射青绿
     const heightTint = clamp(wp.y.mul(0.15).add(0.2), 0, 1);
     const body = mix(deep, shallow, heightTint);
-    // 太阳高光（半角向量，窄高次幂）
-    const sun = normalize(vec3(0.4, 0.35, 0.6));
+    // 太阳高光（半角向量，窄高次幂）；方向与天空盘共用 SUN_DIR
+    const sun = normalize(vec3(SUN_DIR[0], SUN_DIR[1], SUN_DIR[2]));
     const spec = pow(max(dot(n, normalize(V.add(sun))), 0), 360).mul(2);
     let col: any = mix(body, refl, fres).add(vec3(1, 0.95, 0.85).mul(spec));
     col = mix(col, vec3(0.95), clamp(foam.mul(1.4), 0, 1)); // 泡沫盖白

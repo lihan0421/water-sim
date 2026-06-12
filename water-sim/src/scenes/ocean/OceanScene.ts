@@ -19,7 +19,16 @@ export class OceanScene implements WaterScene {
   private controls!: OrbitControls;
   private surface!: THREE.Mesh;
   private skirt!: THREE.Mesh;
+  private cellSize = 1; // 内层网格格距，由 createOceanGeometry 提供，相机吸附按此对齐
   private params = { windSpeed: 10, windDirection: 30, amplitudeScale: 1, choppiness: 1.2 };
+
+  private static readonly FFT_N = 256;
+
+  private createFFT() {
+    const fft = new FFTWaves(OceanScene.FFT_N, this.spectrumParams());
+    fft.choppyU.value = this.params.choppiness;
+    return fft;
+  }
 
   private spectrumParams() {
     return {
@@ -39,10 +48,10 @@ export class OceanScene implements WaterScene {
     this.ctx = ctx;
     this.scene.backgroundNode = skyColor(positionWorldDirection);
 
-    this.fft = new FFTWaves(256, this.spectrumParams());
-    this.fft.choppyU.value = this.params.choppiness;
+    this.fft = this.createFFT();
 
-    const { inner, outer } = createOceanGeometry();
+    const { inner, outer, cellSize } = createOceanGeometry();
+    this.cellSize = cellSize;
     const material = this.buildMaterial();
     this.surface = new THREE.Mesh(inner, material);
     this.skirt = new THREE.Mesh(outer, material);
@@ -57,8 +66,7 @@ export class OceanScene implements WaterScene {
 
     const rebuild = () => {
       const old = this.fft;
-      this.fft = new FFTWaves(256, this.spectrumParams());
-      this.fft.choppyU.value = this.params.choppiness;
+      this.fft = this.createFFT();
       const mat = this.buildMaterial();
       const prevMat = this.surface.material as THREE.Material;
       this.surface.material = mat;
@@ -76,8 +84,8 @@ export class OceanScene implements WaterScene {
   update(_dt: number, time: number) {
     this.fft.update(this.ctx.renderer, time);
     this.controls.update();
-    // 海面网格按单元吸附跟随相机，使无限海面无游移感（snap = 内层格距 1 米）
-    const snap = 512 / 512;
+    // 海面网格按单元吸附跟随相机，使无限海面无游移感
+    const snap = this.cellSize;
     this.surface.position.x = Math.round(this.ctx.camera.position.x / snap) * snap;
     this.surface.position.z = Math.round(this.ctx.camera.position.z / snap) * snap;
   }
@@ -88,7 +96,6 @@ export class OceanScene implements WaterScene {
     this.surface.geometry.dispose();
     this.skirt.geometry.dispose();
     (this.surface.material as THREE.Material).dispose();
-    this.scene.background = null;
     this.scene.backgroundNode = null;
   }
 }
