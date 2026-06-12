@@ -3,15 +3,7 @@ import { texture } from 'three/tsl';
 import { App } from './core/App';
 import type { WaterScene, SceneContext } from './core/WaterScene';
 import { FFTWaves } from './sim/fft/FFTWaves';
-
-class PlaceholderScene implements WaterScene {
-  readonly name = 'placeholder';
-  scene = new THREE.Scene();
-  private cube = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshNormalMaterial());
-  async init(ctx: SceneContext) { this.scene.add(this.cube); ctx.camera.position.set(0, 1, 3); ctx.camera.lookAt(0, 0, 0); }
-  update(dt: number) { this.cube.rotation.y += dt; }
-  dispose() { this.cube.geometry.dispose(); (this.cube.material as THREE.Material).dispose(); }
-}
+import { OceanScene } from './scenes/ocean/OceanScene';
 
 /**
  * 调试场景（?debug=fft）：跑 FFTWaves，用一张平面显示 cascade[0] 位移纹理，
@@ -54,7 +46,7 @@ async function boot() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   document.body.appendChild(renderer.domElement);
   const debugFft = new URLSearchParams(location.search).get('debug') === 'fft';
-  const factories: Record<string, () => WaterScene> = { ocean: () => new PlaceholderScene() };
+  const factories: Record<string, () => WaterScene> = { ocean: () => new OceanScene() };
   if (debugFft) factories['fft-debug'] = () => new FFTDebugScene();
   const app = new App(renderer, factories);
   await app.switchTo(debugFft ? 'fft-debug' : 'ocean');
