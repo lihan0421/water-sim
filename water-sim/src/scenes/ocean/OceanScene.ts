@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { positionWorldDirection } from 'three/tsl';
 import type { WaterScene, SceneContext } from '../../core/WaterScene';
 import { FFTWaves } from '../../sim/fft/FFTWaves';
+import { InteractiveWaves } from '../../sim/interactive/InteractiveWaves';
 import { createOceanGeometry } from './surfaceGeometry';
 import { createWaterMaterial } from './WaterMaterial';
 import { skyColor } from './skyNode';
@@ -16,7 +17,10 @@ export class OceanScene implements WaterScene {
   scene = new THREE.Scene();
   private ctx!: SceneContext;
   private fft!: FFTWaves;
+  private interactive!: InteractiveWaves;
   private controls!: OrbitControls;
+  private raycaster = new THREE.Raycaster();
+  private waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private surface!: THREE.Mesh;
   private skirt!: THREE.Mesh;
   private cellSize = 1; // 内层网格格距，由 createOceanGeometry 提供，相机吸附按此对齐
@@ -40,7 +44,11 @@ export class OceanScene implements WaterScene {
   }
 
   private buildMaterial() {
-    const { material } = createWaterMaterial({ fft: this.fft });
+    const i = this.interactive;
+    const { material } = createWaterMaterial({
+      fft: this.fft,
+      interactive: { heightTex: i.heightTex, foamTex: i.foamTex, origin: i.origin, sizeMeters: i.sizeMeters },
+    });
     return material;
   }
 
@@ -49,6 +57,7 @@ export class OceanScene implements WaterScene {
     this.scene.backgroundNode = skyColor(positionWorldDirection);
 
     this.fft = this.createFFT();
+    this.interactive = new InteractiveWaves({ sizeMeters: 200, boundary: 'absorb' });
 
     const { inner, outer, cellSize } = createOceanGeometry();
     this.cellSize = cellSize;
@@ -79,10 +88,30 @@ export class OceanScene implements WaterScene {
     ctx.gui.add(this.params, 'amplitudeScale', 0.2, 2.5, 0.05).name('浪高').onFinishChange(rebuild);
     ctx.gui.add(this.params, 'choppiness', 0, 2.5, 0.05).name('尖锐度')
       .onChange((v: number) => { this.fft.choppyU.value = v; });
+
+    // 临时交互：点击海面（y=0 平面）注入凹陷涟漪
+    ctx.domElement.addEventListener('pointerdown', this.onPointerDown);
   }
 
-  update(_dt: number, time: number) {
+  private onPointerDown = (e: PointerEvent) => {
+    const el = this.ctx.domElement;
+    const rect = el.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.ctx.camera);
+    const hit = new THREE.Vector3();
+    if (this.raycaster.ray.intersectPlane(this.waterPlane, hit)) {
+      this.interactive.addDisturbance(hit.x, hit.z, -0.8, 2);
+    }
+  };
+
+  update(dt: number, time: number) {
     this.fft.update(this.ctx.renderer, time);
+    // 交互层网格跟随相机（整格吸附），再推进一步波动 + 扰动
+    this.interactive.follow(this.ctx.camera.position.x, this.ctx.camera.position.z);
+    this.interactive.update(this.ctx.renderer, dt);
     this.controls.update();
     // 海面网格按单元吸附跟随相机，使无限海面无游移感
     const snap = this.cellSize;
@@ -91,8 +120,10 @@ export class OceanScene implements WaterScene {
   }
 
   dispose() {
+    this.ctx.domElement.removeEventListener('pointerdown', this.onPointerDown);
     this.controls.dispose();
     this.fft.dispose();
+    this.interactive.dispose();
     this.surface.geometry.dispose();
     this.skirt.geometry.dispose();
     (this.surface.material as THREE.Material).dispose();
