@@ -4,9 +4,10 @@ import {
   float, int, vec2, vec4, ivec2, textureStore, If, Loop, clamp,
 } from 'three/tsl';
 
-// 交互波动层 GPU 实现（Task 7）。算法与 waveKernel.ts 严格一致（CPU 测试即回归基准）：
+// 交互波动层 GPU 实现（Task 7）。波动方程部分与 waveKernel.ts 一致（CPU 测试即回归基准）：
 // 显式波动方程 next = h + (h-prev)(1-damp) + c²dt²∇²h，边缘按 boundary 处理。
-// 在此基础上叠加：扰动注入（点击/船尾迹）、泡沫累积、网格整格吸附跟随。
+// 在此基础上叠加（无 CPU 覆盖）：扰动注入（点击/船尾迹）、泡沫累积、网格整格吸附跟随；
+// 平流项仅 CPU 版有，GPU 版留待河流任务。
 export interface InteractiveOpts {
   N?: number;             // 网格分辨率，默认 512
   sizeMeters: number;     // 网格覆盖边长
@@ -16,6 +17,11 @@ export interface InteractiveOpts {
 }
 
 const MAX_DISTURB = 16;
+const FOAM_DECAY = 0.985;     // 每子步泡沫保留率
+const FOAM_VEL_GAIN = 6;      // |波速度|→泡沫注入增益
+const FOAM_MAX_INJECT = 0.08; // 单子步泡沫注入上限
+const STEP = 1 / 60;          // 固定物理子步（秒），波速不随帧率变化
+const MAX_SUBSTEPS = 4;       // 单帧子步上限，防卡顿后追帧雪崩
 
 export class InteractiveWaves {
   readonly N: number;
@@ -28,11 +34,13 @@ export class InteractiveWaves {
   private dPosU: any; private dValU: any; private dCountU = uniform(0, 'int'); // 扰动数量，int 作循环上界
   private c2dt2U = uniform(0.2); private dampU: any;
   private boundaryReflect: number;
-  // 扰动暂存（每帧清零）
-  private disturbCount = 0;
+  // 扰动暂存：先存世界坐标，update 时（follow 更新 origin 之后）再换算格坐标，避免用过期 origin
+  private pending = Array.from({ length: MAX_DISTURB }, () => ({ x: 0, z: 0, strength: 0, radius: 0 }));
+  private pendingCount = 0;
   // 物理参数
   private waveSpeed: number; private dx: number;
   private ring = 0;
+  private acc = 0; // 子步时间累加器
 
   constructor(o: InteractiveOpts) {
     this.N = o.N ?? 512;
@@ -41,6 +49,8 @@ export class InteractiveWaves {
     this.waveSpeed = o.waveSpeed ?? 6;
     this.dampU = uniform(o.damping ?? 0.015);
     this.boundaryReflect = o.boundary === 'reflect' ? 1 : 0;
+    // CFL 稳定性：c²dt²/dx² ≤ 0.4（固定子步下为常量，留余量于 0.5 临界）
+    this.c2dt2U.value = Math.min((this.waveSpeed * this.waveSpeed * STEP * STEP) / (this.dx * this.dx), 0.4);
 
     const NN = this.N * this.N;
     const a = instancedArray(NN, 'float'), b = instancedArray(NN, 'float'), c = instancedArray(NN, 'float');
@@ -90,7 +100,7 @@ export class InteractiveWaves {
 
       // 泡沫：波速度大处注入（封顶），整体缓慢衰减
       const f = foamBuf.element(i);
-      f.assign(clamp(f.mul(0.985).add(clamp(vel.abs().mul(6), float(0), float(0.08))), float(0), float(1)));
+      f.assign(clamp(f.mul(FOAM_DECAY).add(clamp(vel.abs().mul(FOAM_VEL_GAIN), float(0), float(FOAM_MAX_INJECT))), float(0), float(1)));
     })().compute(NN);
 
     const steps = [mkStep(a, b, c), mkStep(b, c, a), mkStep(c, a, b)];
@@ -106,33 +116,52 @@ export class InteractiveWaves {
     this.computes = { step: steps, export: [mkExport(c), mkExport(a), mkExport(b)] };
   }
 
-  /** 世界坐标处注入扰动。strength 正=抬升 负=压低（米），radius 米 */
+  /** 世界坐标处注入扰动。strength 正=抬升 负=压低（米），radius 米。
+   * 丢弃条件：单帧超过 MAX_DISTURB 条直接丢弃；落在网格边界外的在 update 换算时丢弃。 */
   addDisturbance(worldX: number, worldZ: number, strength: number, radiusMeters: number) {
-    if (this.disturbCount >= MAX_DISTURB) return;
-    const gx = (worldX - this.origin.value.x) / this.dx + this.N / 2;
-    const gz = (worldZ - this.origin.value.y) / this.dx + this.N / 2;
-    if (gx < 1 || gx >= this.N - 1 || gz < 1 || gz >= this.N - 1) return;
-    const k = this.disturbCount++;
-    (this.dPosU as any).array[k].set(gx, gz);
-    (this.dValU as any).array[k].set(strength, Math.max(radiusMeters / this.dx, 1.5));
+    if (this.pendingCount >= MAX_DISTURB) return;
+    const p = this.pending[this.pendingCount++];
+    p.x = worldX; p.z = worldZ; p.strength = strength; p.radius = radiusMeters;
   }
 
-  /** 网格跟随目标（船/相机），整格吸附避免重采样游移；平移出域的旧波形被钳制丢弃 */
+  /** 网格跟随目标，整格吸附避免重采样游移。
+   * 注意：缓冲内容不随 origin 滚动搬运，已有波形会随网格整体平移——
+   * 跟随点须选缓变锚（OrbitControls.target / 船位），勿用旋转中的相机位置。 */
   follow(targetX: number, targetZ: number) {
     const sx = Math.round(targetX / this.dx) * this.dx;
     const sz = Math.round(targetZ / this.dx) * this.dx;
     this.origin.value.set(sx, sz);
   }
 
-  update(renderer: THREE.WebGPURenderer, _dt: number) {
-    // CFL 稳定性：c²dt²/dx² ≤ 0.4（固定子步 1/60s，留余量于 0.5 临界）
-    const c2dt2 = (this.waveSpeed * this.waveSpeed * (1 / 60) ** 2) / (this.dx * this.dx);
-    this.c2dt2U.value = Math.min(c2dt2, 0.4);
-    this.dCountU.value = this.disturbCount;
-    renderer.compute(this.computes.step[this.ring]);
-    renderer.compute(this.computes.export[this.ring]);
-    this.ring = (this.ring + 1) % 3;
-    this.disturbCount = 0; // 扰动一次性消费
+  update(renderer: THREE.WebGPURenderer, dt: number) {
+    // 按真实 dt 累积、固定 1/60s 子步推进：帧率高低不改变波速与泡沫衰减节奏
+    this.acc += dt;
+    let steps = Math.floor(this.acc / STEP);
+    if (steps > MAX_SUBSTEPS) { steps = MAX_SUBSTEPS; this.acc = 0; }
+    else this.acc -= steps * STEP;
+    if (steps === 0) return; // 扰动保留到下一帧消费
+
+    // 此刻 origin 已由 follow 更新，再换算扰动格坐标；仅注入第一子步
+    let n = 0;
+    for (let k = 0; k < this.pendingCount; k++) {
+      const p = this.pending[k];
+      const gx = (p.x - this.origin.value.x) / this.dx + this.N / 2;
+      const gz = (p.z - this.origin.value.y) / this.dx + this.N / 2;
+      if (gx < 1 || gx >= this.N - 1 || gz < 1 || gz >= this.N - 1) continue;
+      (this.dPosU as any).array[n].set(gx, gz);
+      (this.dValU as any).array[n].set(p.strength, Math.max(p.radius / this.dx, 1.5));
+      n++;
+    }
+    this.pendingCount = 0;
+    this.dCountU.value = n;
+
+    for (let s = 0; s < steps; s++) {
+      renderer.compute(this.computes.step[this.ring]);
+      this.ring = (this.ring + 1) % 3;
+      this.dCountU.value = 0; // 每次 renderer.compute 单独提交，子步间改 uniform 安全
+    }
+    // 导出最后一子步写入的缓冲（其 step 的 ring 序号为当前 ring-1）
+    renderer.compute(this.computes.export[(this.ring + 2) % 3]);
   }
 
   /** 当前高度所在 instancedArray（供 HeightSampler 回读）：step 后刚写入的 next 即最新。

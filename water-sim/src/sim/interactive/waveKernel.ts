@@ -1,5 +1,5 @@
-// 交互波动层 CPU 参考核（Task 7）。GPU 版 InteractiveWaves 与此算法严格一致，
-// 故此处的测试即是 GPU 行为的回归基准。
+// 交互波动层 CPU 参考核（Task 7）。GPU 版 InteractiveWaves 的波动方程部分与此一致
+//（此处测试即其回归基准）；平流仅 CPU（GPU 版留待河流任务），扰动/泡沫仅 GPU。
 export interface WaveParams {
   c2dt2: number;     // c²·dt²/dx²，CFL 稳定性要求 < 0.5
   damping: number;   // 每步速度衰减系数
@@ -8,7 +8,7 @@ export interface WaveParams {
   dt: number;
 }
 
-/** 一步显式波动方程。next = 2h - prev·(1-damp) … + c²dt²∇²h，边缘按 boundary 处理 */
+/** 一步显式波动方程。next = h + (h-prev)·(1-damp) + c²dt²∇²h，边缘按 boundary 处理 */
 export function waveStep(prev: Float32Array, curr: Float32Array, next: Float32Array, N: number, p: WaveParams) {
   const at = (x: number, z: number) => {
     if (x < 0 || x >= N || z < 0 || z >= N) return 0;

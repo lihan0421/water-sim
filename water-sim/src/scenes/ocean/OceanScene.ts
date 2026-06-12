@@ -109,8 +109,8 @@ export class OceanScene implements WaterScene {
 
   update(dt: number, time: number) {
     this.fft.update(this.ctx.renderer, time);
-    // 交互层网格跟随相机（整格吸附），再推进一步波动 + 扰动
-    this.interactive.follow(this.ctx.camera.position.x, this.ctx.camera.position.z);
+    // 交互层网格跟随轨道目标（缓变锚点；相机位置在旋转时大幅移动会拖拽已有波形）
+    this.interactive.follow(this.controls.target.x, this.controls.target.z);
     this.interactive.update(this.ctx.renderer, dt);
     this.controls.update();
     // 海面网格按单元吸附跟随相机，使无限海面无游移感
