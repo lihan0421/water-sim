@@ -1,9 +1,12 @@
 import * as THREE from 'three/webgpu';
+import { Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { positionWorldDirection } from 'three/tsl';
 import type { WaterScene, SceneContext } from '../../core/WaterScene';
 import { FFTWaves } from '../../sim/fft/FFTWaves';
 import { InteractiveWaves } from '../../sim/interactive/InteractiveWaves';
+import { GpuHeightMirror, WaterHeightField, type GridMapping } from '../../physics/HeightSampler';
+import { Throwables } from '../../entities/Throwables';
 import { createOceanGeometry } from './surfaceGeometry';
 import { createWaterMaterial } from './WaterMaterial';
 import { skyColor } from './skyNode';
@@ -11,6 +14,7 @@ import { skyColor } from './skyNode';
 /**
  * 第一个可见的大海：FFT 海浪 + 位移水面 + 程序化天空 + OrbitControls。
  * GUI 改风速/风向/浪高需重建 FFTWaves（频谱是构造时烘焙的），choppy 可热改。
+ * 物理：FFT cascade0/1 高度 + 交互层高度回读组成 WaterHeightField，供投掷物体浮力。
  */
 export class OceanScene implements WaterScene {
   readonly name = 'ocean';
@@ -23,8 +27,11 @@ export class OceanScene implements WaterScene {
   private waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private surface!: THREE.Mesh;
   private skirt!: THREE.Mesh;
+  private heightField!: WaterHeightField;
+  private throwables!: Throwables;
   private cellSize = 1; // 内层网格格距，由 createOceanGeometry 提供，相机吸附按此对齐
   private params = { windSpeed: 10, windDirection: 30, amplitudeScale: 1, choppiness: 1.2 };
+  private spawnKind: 'ball' | 'box' = 'ball';
 
   private static readonly FFT_N = 256;
 
@@ -67,6 +74,35 @@ export class OceanScene implements WaterScene {
     this.skirt.position.y = -0.01; // 略低于内层，避免 z-fighting
     this.scene.add(this.surface, this.skirt);
 
+    // 标准材质物体需要光照
+    const sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
+    sun.position.set(40, 60, 20);
+    this.scene.add(sun, new THREE.HemisphereLight(0xbcd8ff, 0x102030, 0.6));
+
+    // —— 物理高度场：FFT cascade0/1（平铺，provider 跟随 rebuild）+ 交互层（钳制，provider 跟随环形缓冲）——
+    const N = OceanScene.FFT_N;
+    const mkFftLayer = (idx: number) => ({
+      mirror: new GpuHeightMirror(ctx.renderer, () => this.fft.cascades[idx].heightBuffer, N),
+      mapping: (): GridMapping => ({ originX: 0, originZ: 0, sizeMeters: this.fft.cascades[idx].domainSize, N }),
+      tiling: true,
+    });
+    this.heightField = new WaterHeightField([
+      mkFftLayer(0), // 250m 大尺度
+      mkFftLayer(1), // 60m 中尺度（cascade2=15m 细波跳过，省回读带宽）
+      {
+        mirror: new GpuHeightMirror(ctx.renderer, () => this.interactive.currentBuffer, this.interactive.N),
+        mapping: (): GridMapping => ({
+          originX: this.interactive.origin.value.x,
+          originZ: this.interactive.origin.value.y,
+          sizeMeters: this.interactive.sizeMeters,
+          N: this.interactive.N,
+        }),
+        tiling: false,
+      },
+    ]);
+
+    this.throwables = new Throwables(this.scene, this.interactive);
+
     ctx.camera.position.set(0, 25, 60);
     ctx.camera.lookAt(0, 0, 0);
     this.controls = new OrbitControls(ctx.camera, ctx.domElement);
@@ -82,18 +118,24 @@ export class OceanScene implements WaterScene {
       this.skirt.material = mat;
       prevMat.dispose();
       old.dispose(); // 释放旧级联的 compute 管线与纹理，避免 VRAM 堆积
+      // 注：mirror 的 bufferNode 用 provider 读 this.fft.cascades[idx]，rebuild 后自动指向新级联
     };
     ctx.gui.add(this.params, 'windSpeed', 2, 25, 0.5).name('风速 m/s').onFinishChange(rebuild);
     ctx.gui.add(this.params, 'windDirection', 0, 360, 1).name('风向°').onFinishChange(rebuild);
     ctx.gui.add(this.params, 'amplitudeScale', 0.2, 2.5, 0.05).name('浪高').onFinishChange(rebuild);
     ctx.gui.add(this.params, 'choppiness', 0, 2.5, 0.05).name('尖锐度')
       .onChange((v: number) => { this.fft.choppyU.value = v; });
+    const spawnSel = { kind: this.spawnKind };
+    ctx.gui.add(spawnSel, 'kind', { 球: 'ball', 箱: 'box' }).name('投掷类型')
+      .onChange((v: 'ball' | 'box') => { this.spawnKind = v; });
+    ctx.gui.add({ 清空: () => this.throwables.clear() }, '清空');
 
-    // 临时交互：点击海面（y=0 平面）注入凹陷涟漪
+    // 点击海面 → 在相机处生成物体、朝点击方向抛出（Shift 键投箱，覆盖类型选择器）
     ctx.domElement.addEventListener('pointerdown', this.onPointerDown);
   }
 
   private onPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return; // 仅左键投掷，保留右键/中键给 OrbitControls
     const el = this.ctx.domElement;
     const rect = el.getBoundingClientRect();
     const ndc = new THREE.Vector2(
@@ -102,9 +144,19 @@ export class OceanScene implements WaterScene {
     );
     this.raycaster.setFromCamera(ndc, this.ctx.camera);
     const hit = new THREE.Vector3();
-    if (this.raycaster.ray.intersectPlane(this.waterPlane, hit)) {
-      this.interactive.addDisturbance(hit.x, hit.z, -0.8, 2);
-    }
+    if (!this.raycaster.ray.intersectPlane(this.waterPlane, hit)) return;
+    // 从相机上方略高处投出，初速指向命中点 + 轻微随机扰动
+    const origin = this.ctx.camera.position.clone().addScaledVector(this.raycaster.ray.direction, 2).setY(this.ctx.camera.position.y);
+    const dir = hit.clone().sub(origin);
+    const flat = Math.hypot(dir.x, dir.z) || 1;
+    const speed = 14;
+    const vel = new Vector3(
+      (dir.x / flat) * speed + (Math.random() - 0.5) * 2,
+      4, // 略带上抛，形成抛物线
+      (dir.z / flat) * speed + (Math.random() - 0.5) * 2,
+    );
+    const kind = e.shiftKey ? 'box' : this.spawnKind;
+    this.throwables.spawn(kind, origin, vel);
   };
 
   update(dt: number, time: number) {
@@ -112,6 +164,9 @@ export class OceanScene implements WaterScene {
     // 交互层网格跟随轨道目标（缓变锚点；相机位置在旋转时大幅移动会拖拽已有波形）
     this.interactive.follow(this.controls.target.x, this.controls.target.z);
     this.interactive.update(this.ctx.renderer, dt);
+    // 物理：回读最新高度（fire-and-forget，1 帧延迟）后更新投掷物体浮力
+    this.heightField.refresh();
+    this.throwables.update(dt, (x, z) => this.heightField.height(x, z));
     this.controls.update();
     // 海面网格按单元吸附跟随相机，使无限海面无游移感
     const snap = this.cellSize;
@@ -121,6 +176,7 @@ export class OceanScene implements WaterScene {
 
   dispose() {
     this.ctx.domElement.removeEventListener('pointerdown', this.onPointerDown);
+    this.throwables.dispose();
     this.controls.dispose();
     this.fft.dispose();
     this.interactive.dispose();
