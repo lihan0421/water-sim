@@ -31,7 +31,9 @@ export class OceanScene implements WaterScene {
   private throwables!: Throwables;
   private cellSize = 1; // 内层网格格距，由 createOceanGeometry 提供，相机吸附按此对齐
   private params = { windSpeed: 10, windDirection: 30, amplitudeScale: 1, choppiness: 1.2 };
-  private spawnKind: 'ball' | 'box' = 'ball';
+  private spawnSel: { kind: 'ball' | 'box' } = { kind: 'ball' };
+  private downPos = new THREE.Vector2(); // 左键按下位置，pointerup 时区分单击/拖拽
+  private heightFn!: (x: number, z: number) => number; // 复用闭包，避免每帧新建
 
   private static readonly FFT_N = 256;
 
@@ -80,26 +82,31 @@ export class OceanScene implements WaterScene {
     this.scene.add(sun, new THREE.HemisphereLight(0xbcd8ff, 0x102030, 0.6));
 
     // —— 物理高度场：FFT cascade0/1（平铺，provider 跟随 rebuild）+ 交互层（钳制，provider 跟随环形缓冲）——
+    // mapping 返回复用的对象（每帧每层每查询调用，新建字面量会造成 GC 压力）
     const N = OceanScene.FFT_N;
-    const mkFftLayer = (idx: number) => ({
-      mirror: new GpuHeightMirror(ctx.renderer, () => this.fft.cascades[idx].heightBuffer, N),
-      mapping: (): GridMapping => ({ originX: 0, originZ: 0, sizeMeters: this.fft.cascades[idx].domainSize, N }),
-      tiling: true,
-    });
+    const mkFftLayer = (idx: number) => {
+      const m: GridMapping = { originX: 0, originZ: 0, sizeMeters: 0, N };
+      return {
+        mirror: new GpuHeightMirror(ctx.renderer, () => this.fft.cascades[idx].heightBuffer, N),
+        mapping: () => { m.sizeMeters = this.fft.cascades[idx].domainSize; return m; },
+        tiling: true,
+      };
+    };
+    const im: GridMapping = { originX: 0, originZ: 0, sizeMeters: this.interactive.sizeMeters, N: this.interactive.N };
     this.heightField = new WaterHeightField([
       mkFftLayer(0), // 250m 大尺度
       mkFftLayer(1), // 60m 中尺度（cascade2=15m 细波跳过，省回读带宽）
       {
         mirror: new GpuHeightMirror(ctx.renderer, () => this.interactive.currentBuffer, this.interactive.N),
-        mapping: (): GridMapping => ({
-          originX: this.interactive.origin.value.x,
-          originZ: this.interactive.origin.value.y,
-          sizeMeters: this.interactive.sizeMeters,
-          N: this.interactive.N,
-        }),
+        mapping: () => {
+          im.originX = this.interactive.origin.value.x;
+          im.originZ = this.interactive.origin.value.y;
+          return im;
+        },
         tiling: false,
       },
     ]);
+    this.heightFn = (x, z) => this.heightField.height(x, z);
 
     this.throwables = new Throwables(this.scene, this.interactive);
 
@@ -125,17 +132,23 @@ export class OceanScene implements WaterScene {
     ctx.gui.add(this.params, 'amplitudeScale', 0.2, 2.5, 0.05).name('浪高').onFinishChange(rebuild);
     ctx.gui.add(this.params, 'choppiness', 0, 2.5, 0.05).name('尖锐度')
       .onChange((v: number) => { this.fft.choppyU.value = v; });
-    const spawnSel = { kind: this.spawnKind };
-    ctx.gui.add(spawnSel, 'kind', { 球: 'ball', 箱: 'box' }).name('投掷类型')
-      .onChange((v: 'ball' | 'box') => { this.spawnKind = v; });
+    ctx.gui.add(this.spawnSel, 'kind', { 球: 'ball', 箱: 'box' }).name('投掷类型');
     ctx.gui.add({ 清空: () => this.throwables.clear() }, '清空');
 
-    // 点击海面 → 在相机处生成物体、朝点击方向抛出（Shift 键投箱，覆盖类型选择器）
+    // 点击海面 → 在相机处生成物体、朝点击方向抛出（Shift 键投箱，覆盖类型选择器）。
+    // 左键同时是 OrbitControls 旋转键：在 pointerup 时按位移阈值区分单击与拖拽，拖拽不投掷。
     ctx.domElement.addEventListener('pointerdown', this.onPointerDown);
+    ctx.domElement.addEventListener('pointerup', this.onPointerUp);
   }
 
   private onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return; // 仅左键投掷，保留右键/中键给 OrbitControls
+    if (e.button !== 0) return;
+    this.downPos.set(e.clientX, e.clientY);
+  };
+
+  private onPointerUp = (e: PointerEvent) => {
+    if (e.button !== 0) return; // 仅左键投掷，右键/中键给 OrbitControls
+    if (Math.hypot(e.clientX - this.downPos.x, e.clientY - this.downPos.y) > 5) return; // 拖拽=旋转相机
     const el = this.ctx.domElement;
     const rect = el.getBoundingClientRect();
     const ndc = new THREE.Vector2(
@@ -145,7 +158,7 @@ export class OceanScene implements WaterScene {
     this.raycaster.setFromCamera(ndc, this.ctx.camera);
     const hit = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(this.waterPlane, hit)) return;
-    // 从相机上方略高处投出，初速指向命中点 + 轻微随机扰动
+    // 从相机前方 2m（同高度）投出，初速指向命中点 + 轻微随机扰动
     const origin = this.ctx.camera.position.clone().addScaledVector(this.raycaster.ray.direction, 2).setY(this.ctx.camera.position.y);
     const dir = hit.clone().sub(origin);
     const flat = Math.hypot(dir.x, dir.z) || 1;
@@ -155,7 +168,7 @@ export class OceanScene implements WaterScene {
       4, // 略带上抛，形成抛物线
       (dir.z / flat) * speed + (Math.random() - 0.5) * 2,
     );
-    const kind = e.shiftKey ? 'box' : this.spawnKind;
+    const kind = e.shiftKey ? 'box' : this.spawnSel.kind;
     this.throwables.spawn(kind, origin, vel);
   };
 
@@ -166,7 +179,7 @@ export class OceanScene implements WaterScene {
     this.interactive.update(this.ctx.renderer, dt);
     // 物理：回读最新高度（fire-and-forget，1 帧延迟）后更新投掷物体浮力
     this.heightField.refresh();
-    this.throwables.update(dt, (x, z) => this.heightField.height(x, z));
+    this.throwables.update(dt, this.heightFn, this.controls.target.x, this.controls.target.z);
     this.controls.update();
     // 海面网格按单元吸附跟随相机，使无限海面无游移感
     const snap = this.cellSize;
@@ -176,6 +189,7 @@ export class OceanScene implements WaterScene {
 
   dispose() {
     this.ctx.domElement.removeEventListener('pointerdown', this.onPointerDown);
+    this.ctx.domElement.removeEventListener('pointerup', this.onPointerUp);
     this.throwables.dispose();
     this.controls.dispose();
     this.fft.dispose();
