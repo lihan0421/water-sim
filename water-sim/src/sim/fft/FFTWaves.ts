@@ -10,6 +10,8 @@ export interface CascadeConfig {
   domainSize: number; // 米
 }
 
+const FOAM_JACOBIAN_BIAS = 0.6; // J < 0.6 起沫（波峰挤压判据）
+
 /**
  * 单级联 GPU FFT 海浪管线。每帧流程：
  * ① 频谱时变 h(k,t)，并打包位移谱 P = Dx + i·Dz
@@ -149,7 +151,7 @@ export class FFTCascade {
       const jzz = float(1).add(t.z.sub(b.z).div(2 * texel));
       const jxz = t.x.sub(b.x).div(2 * texel);
       const jac = jxx.mul(jzz).sub(jxz.mul(jxz));
-      const foam = float(0.6).sub(jac).max(0);
+      const foam = float(FOAM_JACOBIAN_BIAS).sub(jac).max(0);
       textureStore(normalFoamTex, ivec2(ix, iz), vec4(n.x, n.y, n.z, foam));
     })().compute(NN);
 
@@ -165,6 +167,12 @@ export class FFTCascade {
   }
 
   dispose() {
+    // compute 节点也要显式 dispose：靠 GC 释放 pipeline/storage 不及时，
+    // 场景切换或 GUI rebuild 反复重建级联时会堆积 VRAM
+    this.computes.update.dispose();
+    for (const p of this.computes.passes) p.dispose();
+    this.computes.output.dispose();
+    this.computes.normals.dispose();
     this.displacementTex.dispose();
     this.normalFoamTex.dispose();
   }
