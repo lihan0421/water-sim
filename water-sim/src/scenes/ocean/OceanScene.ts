@@ -7,6 +7,7 @@ import { FFTWaves } from '../../sim/fft/FFTWaves';
 import { InteractiveWaves } from '../../sim/interactive/InteractiveWaves';
 import { GpuHeightMirror, WaterHeightField, type GridMapping } from '../../physics/HeightSampler';
 import { Throwables } from '../../entities/Throwables';
+import { Boat } from '../../entities/Boat';
 import { createOceanGeometry } from './surfaceGeometry';
 import { createWaterMaterial } from './WaterMaterial';
 import { skyColor } from './skyNode';
@@ -29,11 +30,15 @@ export class OceanScene implements WaterScene {
   private skirt!: THREE.Mesh;
   private heightField!: WaterHeightField;
   private throwables!: Throwables;
+  private boat!: Boat;
   private cellSize = 1; // 内层网格格距，由 createOceanGeometry 提供，相机吸附按此对齐
   private params = { windSpeed: 10, windDirection: 30, amplitudeScale: 1, choppiness: 1.2 };
+  private camMode = { follow: false }; // 相机模式：false=自由轨道，true=跟船
   private spawnSel: { kind: 'ball' | 'box' } = { kind: 'ball' };
   private downPos = new THREE.Vector2(); // 左键按下位置，pointerup 时区分单击/拖拽
   private heightFn!: (x: number, z: number) => number; // 复用闭包，避免每帧新建
+  private camBack = new THREE.Vector3(); // 跟船相机暂存
+  private camTarget = new THREE.Vector3();
 
   private static readonly FFT_N = 256;
 
@@ -109,6 +114,7 @@ export class OceanScene implements WaterScene {
     this.heightFn = (x, z) => this.heightField.height(x, z);
 
     this.throwables = new Throwables(this.scene, this.interactive);
+    this.boat = new Boat(this.scene, this.interactive);
 
     ctx.camera.position.set(0, 25, 60);
     ctx.camera.lookAt(0, 0, 0);
@@ -134,6 +140,9 @@ export class OceanScene implements WaterScene {
       .onChange((v: number) => { this.fft.choppyU.value = v; });
     ctx.gui.add(this.spawnSel, 'kind', { 球: 'ball', 箱: 'box' }).name('投掷类型');
     ctx.gui.add({ 清空: () => this.throwables.clear() }, '清空');
+    // 相机模式：跟船时禁用轨道控制（避免与跟随写位姿打架），切回自由时重启
+    ctx.gui.add(this.camMode, 'follow').name('跟船视角')
+      .onChange((v: boolean) => { this.controls.enabled = !v; });
 
     // 点击海面 → 在相机处生成物体、朝点击方向抛出（Shift 键投箱，覆盖类型选择器）。
     // 左键同时是 OrbitControls 旋转键：在 pointerup 时按位移阈值区分单击与拖拽，拖拽不投掷。
@@ -174,13 +183,27 @@ export class OceanScene implements WaterScene {
 
   update(dt: number, time: number) {
     this.fft.update(this.ctx.renderer, time);
-    // 交互层网格跟随轨道目标（缓变锚点；相机位置在旋转时大幅移动会拖拽已有波形）
-    this.interactive.follow(this.controls.target.x, this.controls.target.z);
+    // 顺序：boat → throwables → interactive → fft（已上）→ heightField.refresh
+    // 船需在 interactive.follow 之前更新，但其激波扰动先入暂存队列，follow 更新 origin 后再换算格坐标（见 InteractiveWaves）
+    this.boat.update(dt, this.heightFn);
+    // 交互层网格跟随船（缓变锚点；船是玩家关注中心，激波/尾迹始终落在分辨率最高的交互层内）
+    const bp = this.boat.position;
+    this.interactive.follow(bp.x, bp.z);
     this.interactive.update(this.ctx.renderer, dt);
-    // 物理：回读最新高度（fire-and-forget，1 帧延迟）后更新投掷物体浮力
+    // 物理：回读最新高度（fire-and-forget，1 帧延迟）后更新投掷物体浮力（回收锚点用船位）
     this.heightField.refresh();
-    this.throwables.update(dt, this.heightFn, this.controls.target.x, this.controls.target.z);
-    this.controls.update();
+    this.throwables.update(dt, this.heightFn, bp.x, bp.z);
+
+    if (this.camMode.follow) {
+      // 跟船：相机置于船后上方，lerp 平滑，lookAt 船
+      // getWorldDirection 返回 +Z（Three 约定）；船头在 -Z，故 +Z 即船尾方向，相机沿此后退
+      this.boat.group.getWorldDirection(this.camBack);
+      this.camTarget.copy(bp).addScaledVector(this.camBack, 18); this.camTarget.y += 8;
+      this.ctx.camera.position.lerp(this.camTarget, Math.min(dt * 3, 1));
+      this.ctx.camera.lookAt(bp.x, bp.y, bp.z);
+    } else {
+      this.controls.update();
+    }
     // 海面网格按单元吸附跟随相机，使无限海面无游移感
     const snap = this.cellSize;
     this.surface.position.x = Math.round(this.ctx.camera.position.x / snap) * snap;
@@ -191,6 +214,7 @@ export class OceanScene implements WaterScene {
     this.ctx.domElement.removeEventListener('pointerdown', this.onPointerDown);
     this.ctx.domElement.removeEventListener('pointerup', this.onPointerUp);
     this.throwables.dispose();
+    this.boat.dispose();
     this.controls.dispose();
     this.fft.dispose();
     this.interactive.dispose();
