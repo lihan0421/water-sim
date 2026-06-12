@@ -140,9 +140,13 @@ export class OceanScene implements WaterScene {
       .onChange((v: number) => { this.fft.choppyU.value = v; });
     ctx.gui.add(this.spawnSel, 'kind', { 球: 'ball', 箱: 'box' }).name('投掷类型');
     ctx.gui.add({ 清空: () => this.throwables.clear() }, '清空');
-    // 相机模式：跟船时禁用轨道控制（避免与跟随写位姿打架），切回自由时重启
+    // 相机模式：跟船时禁用轨道控制（避免与跟随写位姿打架）；
+    // 切回自由时把轨道目标移到船位，否则 controls.update 会向旧目标猛拉视角
     ctx.gui.add(this.camMode, 'follow').name('跟船视角')
-      .onChange((v: boolean) => { this.controls.enabled = !v; });
+      .onChange((v: boolean) => {
+        this.controls.enabled = !v;
+        if (!v) this.controls.target.copy(this.boat.position);
+      });
 
     // 点击海面 → 在相机处生成物体、朝点击方向抛出（Shift 键投箱，覆盖类型选择器）。
     // 左键同时是 OrbitControls 旋转键：在 pointerup 时按位移阈值区分单击与拖拽，拖拽不投掷。
@@ -183,7 +187,7 @@ export class OceanScene implements WaterScene {
 
   update(dt: number, time: number) {
     this.fft.update(this.ctx.renderer, time);
-    // 顺序：boat → throwables → interactive → fft（已上）→ heightField.refresh
+    // 顺序：fft → boat → follow → interactive → heightField.refresh → throwables
     // 船需在 interactive.follow 之前更新，但其激波扰动先入暂存队列，follow 更新 origin 后再换算格坐标（见 InteractiveWaves）
     this.boat.update(dt, this.heightFn);
     // 交互层网格跟随船（缓变锚点；船是玩家关注中心，激波/尾迹始终落在分辨率最高的交互层内）
@@ -196,10 +200,14 @@ export class OceanScene implements WaterScene {
 
     if (this.camMode.follow) {
       // 跟船：相机置于船后上方，lerp 平滑，lookAt 船
-      // getWorldDirection 返回 +Z（Three 约定）；船头在 -Z，故 +Z 即船尾方向，相机沿此后退
+      // getWorldDirection 返回 +Z（Three 约定）；船头在 -Z，故 +Z 即船尾方向，相机沿此后退。
+      // 压平 y 分量：相机不随船体俯仰/横摇起伏
       this.boat.group.getWorldDirection(this.camBack);
+      this.camBack.y = 0;
+      if (this.camBack.lengthSq() > 1e-6) this.camBack.normalize();
       this.camTarget.copy(bp).addScaledVector(this.camBack, 18); this.camTarget.y += 8;
-      this.ctx.camera.position.lerp(this.camTarget, Math.min(dt * 3, 1));
+      // 1-e^(-rate·dt)：帧率无关的指数趋近
+      this.ctx.camera.position.lerp(this.camTarget, 1 - Math.exp(-3 * dt));
       this.ctx.camera.lookAt(bp.x, bp.y, bp.z);
     } else {
       this.controls.update();

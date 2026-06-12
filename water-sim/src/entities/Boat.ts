@@ -30,11 +30,17 @@ export class Boat {
   private cabinGeo: THREE.BoxGeometry;
   private keys = new Set<string>();
   private throttle = 0; private rudder = 0;
-  // 同一处理器接 keydown/keyup；keydown 自动重复仅重复加入 Set（幂等），无需额外去重
+  // 同一处理器接 keydown/keyup；keydown 自动重复仅重复加入 Set（幂等），无需额外去重。
+  // 在 GUI 输入框（lil-gui 的 <input>）里打字不开船。
   private onKey = (e: KeyboardEvent) => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     if (e.type === 'keydown') this.keys.add(e.code); else this.keys.delete(e.code);
   };
+  // 失焦清键，防 Alt+Tab 后 keyup 丢失导致油门卡死
+  private onBlur = () => this.keys.clear();
 
+  /** onBowSplash 的 pos 为共享暂存向量，仅本次调用内有效；持有须自行 clone */
   constructor(scene: THREE.Scene, private waves: InteractiveWaves | null,
               public onBowSplash?: (pos: Vector3, speed: number) => void) {
     // 程序化船体：壳(拉伸盒) + 船头楔(四棱锥) + 舱
@@ -61,6 +67,7 @@ export class Boat {
       linearDrag: 1500, angularDrag: 4,
     });
     addEventListener('keydown', this.onKey); addEventListener('keyup', this.onKey);
+    addEventListener('blur', this.onBlur);
   }
 
   /** 跟随相机/锚点用：当前船位（直接返回内部刚体位置，调用方勿改写） */
@@ -73,8 +80,10 @@ export class Boat {
     this.throttle += (fwd - this.throttle) * Math.min(dt * 2, 1);
     this.rudder += (turn - this.rudder) * Math.min(dt * 4, 1);
 
-    // 艏向（船头 -Z）投影到水平面
-    _heading.set(0, 0, -1).applyQuaternion(this.body.quaternion); _heading.y = 0; _heading.normalize();
+    // 艏向（船头 -Z）投影到水平面；接近竖直（翻覆/极端俯仰）时跳过本帧驱动防 NaN
+    _heading.set(0, 0, -1).applyQuaternion(this.body.quaternion); _heading.y = 0;
+    if (_heading.lengthSq() < 1e-6) { this.passive(dt, waterHeight); return; }
+    _heading.normalize();
     _side.set(-_heading.z, 0, _heading.x); // 右舷横向单位向量
     // 船尾作用点（质心→船尾世界偏移，推力施加于此使转向有力矩）
     _stern.copy(_heading).multiplyScalar(-3);
@@ -93,11 +102,12 @@ export class Boat {
     this.group.position.copy(this.body.position);
     this.group.quaternion.copy(this.body.quaternion);
 
-    // —— 船行激波：沿水线注入移动扰动（强度 ∝ 速度，封顶 8m/s）——
-    const speed = this.body.velocity.length();
+    // —— 船行激波：沿水线注入移动扰动（强度 ∝ 水平速度，封顶 8m/s；垂直起伏不算航速）——
+    const speed = Math.hypot(this.body.velocity.x, this.body.velocity.z);
     if (this.waves && speed > 0.5) {
-      _bow.copy(this.body.position).addScaledVector(_heading, -4.2);
-      _sternPos.copy(this.body.position).addScaledVector(_heading, 3.2);
+      // _heading 指向船首（局部 -Z 经四元数旋转），故船首点 = 位置 + heading·正距离
+      _bow.copy(this.body.position).addScaledVector(_heading, 4.2);
+      _sternPos.copy(this.body.position).addScaledVector(_heading, -3.2);
       const k = Math.min(speed / 8, 1);
       this.waves.addDisturbance(_bow.x, _bow.z, 0.25 * k, 1.6);       // 船首抬升 → 开尔文波
       this.waves.addDisturbance(_sternPos.x, _sternPos.z, -0.30 * k, 2.2); // 船尾下陷 → 尾迹
@@ -105,8 +115,18 @@ export class Boat {
     }
   }
 
+  /** 无驱动的纯浮力步进（艏向退化时的回退路径） */
+  private passive(dt: number, waterHeight: HeightFn) {
+    this.floater.applyForces(waterHeight, dt);
+    this.body.applyForce(_grav.set(0, -9.81 * this.body.mass, 0));
+    this.body.step(dt);
+    this.group.position.copy(this.body.position);
+    this.group.quaternion.copy(this.body.quaternion);
+  }
+
   dispose() {
     removeEventListener('keydown', this.onKey); removeEventListener('keyup', this.onKey);
+    removeEventListener('blur', this.onBlur);
     this.group.removeFromParent();
     this.hullGeo.dispose(); this.bowGeo.dispose(); this.cabinGeo.dispose();
     this.hullMat.dispose(); this.deckMat.dispose();
