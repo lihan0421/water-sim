@@ -7,7 +7,7 @@ import {
 // 交互波动层 GPU 实现（Task 7）。波动方程部分与 waveKernel.ts 一致（CPU 测试即回归基准）：
 // 显式波动方程 next = h + (h-prev)(1-damp) + c²dt²∇²h，边缘按 boundary 处理。
 // 在此基础上叠加（无 CPU 覆盖）：扰动注入（点击/船尾迹）、泡沫累积、网格整格吸附跟随；
-// 平流项仅 CPU 版有，GPU 版留待河流任务。
+// 平流项：半拉格朗日平流，flow=0 时退化为直接元素访问（海洋/水槽兼容）。
 export interface InteractiveOpts {
   N?: number;             // 网格分辨率，默认 512
   sizeMeters: number;     // 网格覆盖边长
@@ -33,6 +33,7 @@ export class InteractiveWaves {
   private computes: { step: any[]; export: any[] };
   private dPosU: any; private dValU: any; private dCountU = uniform(0, 'int'); // 扰动数量，int 作循环上界
   private c2dt2U = uniform(0.2); private dampU: any;
+  private flowU = uniform(new THREE.Vector2(0, 0)); // 水平流速（m/s），供半拉格朗日平流
   private boundaryReflect: number;
   // 扰动暂存：先存世界坐标，update 时（follow 更新 origin 之后）再换算格坐标，避免用过期 origin
   private pending = Array.from({ length: MAX_DISTURB }, () => ({ x: 0, z: 0, strength: 0, radius: 0 }));
@@ -65,32 +66,46 @@ export class InteractiveWaves {
     const reflectB = this.boundaryReflect;
     const dampU = this.dampU, c2dt2U = this.c2dt2U, dCountU = this.dCountU;
     const dPosU = this.dPosU, dValU = this.dValU;
+    const flowU = this.flowU;
+    const flowScale = STEP / this.dx; // 固定子步/格距，JS 预算；shader 只乘流速 uniform
 
-    // 三缓冲轮换：每种角色分配（prev,curr,next）各建一个 step compute。
+    // 三缓冲轮换：prev/curr/next 三角色各建一个 step compute。
     const mkStep = (prev: any, curr: any, next: any) => Fn(() => {
       const i = instanceIndex.toInt();
       const x = i.mod(Ni), z = i.div(Ni);
       const edge = x.equal(0).or(x.equal(Nm1)).or(z.equal(0)).or(z.equal(Nm1));
-      // 钳制寻址的拉普拉斯采样（边缘格走 edge 分支，不会用到越界 lap）
+      const xf = x.toFloat(), zf = z.toFloat();
+
+      // 半拉格朗日反追踪：flow=0 → back=(xf,zf) → floor 整数 frac=0 → bilinear = direct access
+      const back = vec2(xf.sub(flowU.x.mul(flowScale)), zf.sub(flowU.y.mul(flowScale)));
+      const x0 = back.x.floor(), z0 = back.y.floor();
+      const fx = back.x.fract(), fz = back.y.fract();
+      const g = (buf: any, xx: any, zz: any) =>
+        buf.element(clamp(zz, float(0), float(Nm1)).toInt().mul(Ni).add(clamp(xx, float(0), float(Nm1)).toInt()));
+      const bil = (buf: any) =>
+        g(buf, x0, z0).mul(fx.oneMinus()).mul(fz.oneMinus())
+        .add(g(buf, x0.add(1), z0).mul(fx).mul(fz.oneMinus()))
+        .add(g(buf, x0, z0.add(1)).mul(fx.oneMinus()).mul(fz))
+        .add(g(buf, x0.add(1), z0.add(1)).mul(fx).mul(fz));
+
+      // 拉普拉斯邻格：直接取当前 curr（非平流），与平流中心项形成 Eulerian 空间差分
       const atC = (xx: any, zz: any) =>
         curr.element(clamp(zz, int(0), int(Nm1)).mul(Ni).add(clamp(xx, int(0), int(Nm1))));
-      const h = curr.element(i), hp = prev.element(i);
+      const h = bil(curr), hp = bil(prev);
       const lap = atC(x.add(1), z).add(atC(x.sub(1), z)).add(atC(x, z.add(1))).add(atC(x, z.sub(1))).sub(h.mul(4));
       const vel = h.sub(hp).mul(float(1).sub(dampU));
       const out = h.add(vel).add(lap.mul(c2dt2U)).toVar();
 
-      // 扰动注入：半径内二次衰减抬升/压低
-      const xf = x.toFloat(), zf = z.toFloat();
+      // 扰动注入：半径内二次衰减
       Loop({ start: int(0), end: dCountU, type: 'int', condition: '<' }, ({ i: di }: any) => {
-        const dp = dPosU.element(di); // 格坐标
-        const dv = dValU.element(di); // x=强度 y=半径(格)
+        const dp = dPosU.element(di);
+        const dv = dValU.element(di);
         const dist = vec2(xf.sub(dp.x), zf.sub(dp.y)).length();
         const w = clamp(float(1).sub(dist.div(dv.y)), float(0), float(1));
         out.addAssign(dv.x.mul(w.mul(w)));
       });
 
       If(edge, () => {
-        // reflect：复制内邻（Neumann）；absorb：内邻半值强阻尼吸收
         next.element(i).assign(
           reflectB
             ? atC(clamp(x, int(1), int(Nm2)), clamp(z, int(1), int(Nm2)))
@@ -98,7 +113,6 @@ export class InteractiveWaves {
         );
       }).Else(() => { next.element(i).assign(out); });
 
-      // 泡沫：波速度大处注入（封顶），整体缓慢衰减
       const f = foamBuf.element(i);
       f.assign(clamp(f.mul(FOAM_DECAY).add(clamp(vel.abs().mul(FOAM_VEL_GAIN), float(0), float(FOAM_MAX_INJECT))), float(0), float(1)));
     })().compute(NN);
@@ -123,6 +137,9 @@ export class InteractiveWaves {
     const p = this.pending[this.pendingCount++];
     p.x = worldX; p.z = worldZ; p.strength = strength; p.radius = radiusMeters;
   }
+
+  /** 设置水平流速（m/s）。河流场景用；flow=(0,0) 时等价于无流（默认）。 */
+  setFlow(vx: number, vz: number) { this.flowU.value.set(vx, vz); }
 
   /** 网格跟随目标，整格吸附避免重采样游移。
    * 注意：缓冲内容不随 origin 滚动搬运，已有波形会随网格整体平移——

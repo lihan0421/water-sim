@@ -4,6 +4,7 @@ import { App } from './core/App';
 import type { WaterScene, SceneContext } from './core/WaterScene';
 import { FFTWaves } from './sim/fft/FFTWaves';
 import { OceanScene } from './scenes/ocean/OceanScene';
+import { RiverScene } from './scenes/river/RiverScene';
 
 /**
  * 调试场景（?debug=fft）：跑 FFTWaves，用一张平面显示 cascade[0] 位移纹理，
@@ -46,7 +47,10 @@ async function boot() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   document.body.appendChild(renderer.domElement);
   const debugFft = new URLSearchParams(location.search).get('debug') === 'fft';
-  const factories: Record<string, () => WaterScene> = { ocean: () => new OceanScene() };
+  const factories: Record<string, () => WaterScene> = {
+    ocean: () => new OceanScene(),
+    river: () => new RiverScene(),
+  };
   if (debugFft) factories['fft-debug'] = () => new FFTDebugScene();
   const app = new App(renderer, factories);
   await app.switchTo(debugFft ? 'fft-debug' : 'ocean');

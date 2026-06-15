@@ -15,6 +15,7 @@ const CULL_RADIUS = 400;     // 距锚点（相机目标）超此距离（米）
 const CULL_DEPTH = 50;       // 沉到水下此深度（米）也回收
 const BALL_R = 0.35;         // 球半径；箱半边长同值（全尺寸 0.7）
 const _g = new Vector3();    // 重力暂存，避免每物体每帧分配
+const _fFlow = new Vector3(); // 水流拖拽力暂存
 
 export class Throwables {
   private items: Item[] = [];
@@ -54,8 +55,8 @@ export class Throwables {
     this.scene.remove(it.mesh);
   }
 
-  /** anchorX/Z：回收判距锚点（传相机目标；海面无限延伸，以世界原点判距会误杀远处玩法） */
-  update(dt: number, waterHeight: HeightFn, anchorX = 0, anchorZ = 0) {
+  /** anchorX/Z：回收判距锚点；flow：水平流速 m/s（河流场景用，0 时省略） */
+  update(dt: number, waterHeight: HeightFn, anchorX = 0, anchorZ = 0, flow?: { x: number; z: number }) {
     // 逆序遍历，便于在循环内安全回收
     for (let k = this.items.length - 1; k >= 0; k--) {
       const it = this.items[k];
@@ -70,6 +71,15 @@ export class Throwables {
         const impact = Math.min(-it.body.velocity.y * 0.12, 1.2); // 凹陷强度随入水垂直速度，封顶 1.2m
         this.waves?.addDisturbance(it.body.position.x, it.body.position.z, -impact, 1.2);
         this.onSplash?.(it.body.position.clone().setY(wh), -it.body.velocity.y);
+      }
+      // 水流拖拽（河流场景）：浸水时施加 (flow - vel_xz) * mass * 0.8
+      if (flow && inWater) {
+        const dk = it.body.mass * 0.8;
+        it.body.applyForce(_fFlow.set(
+          (flow.x - it.body.velocity.x) * dk,
+          0,
+          (flow.z - it.body.velocity.z) * dk,
+        ));
       }
       it.wasAirborne = !inWater;
       it.mesh.position.copy(it.body.position);
