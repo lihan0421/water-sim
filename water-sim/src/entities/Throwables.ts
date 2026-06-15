@@ -55,8 +55,10 @@ export class Throwables {
     this.scene.remove(it.mesh);
   }
 
-  /** anchorX/Z：回收判距锚点；flow：水平流速 m/s（河流场景用，0 时省略） */
-  update(dt: number, waterHeight: HeightFn, anchorX = 0, anchorZ = 0, flow?: { x: number; z: number }) {
+  /** anchorX/Z：回收判距锚点；flow：水平流速；bounds：槽体墙面/底部反弹约束（水槽场景用） */
+  update(dt: number, waterHeight: HeightFn, anchorX = 0, anchorZ = 0,
+         flow?: { x: number; z: number },
+         bounds?: { minX: number; maxX: number; minZ: number; maxZ: number; floorY: number }) {
     // 逆序遍历，便于在循环内安全回收
     for (let k = this.items.length - 1; k >= 0; k--) {
       const it = this.items[k];
@@ -71,6 +73,15 @@ export class Throwables {
         const impact = Math.min(-it.body.velocity.y * 0.12, 1.2); // 凹陷强度随入水垂直速度，封顶 1.2m
         this.waves?.addDisturbance(it.body.position.x, it.body.position.z, -impact, 1.2);
         this.onSplash?.(it.body.position.clone().setY(wh), -it.body.velocity.y);
+      }
+      // 墙面/底部反弹（水槽场景）：越界后位置钳制 + 速度反向衰减
+      if (bounds) {
+        const p = it.body.position, v = it.body.velocity;
+        if (p.x < bounds.minX) { p.x = bounds.minX; v.x = Math.abs(v.x) * 0.5; }
+        if (p.x > bounds.maxX) { p.x = bounds.maxX; v.x = -Math.abs(v.x) * 0.5; }
+        if (p.z < bounds.minZ) { p.z = bounds.minZ; v.z = Math.abs(v.z) * 0.5; }
+        if (p.z > bounds.maxZ) { p.z = bounds.maxZ; v.z = -Math.abs(v.z) * 0.5; }
+        if (p.y < bounds.floorY) { p.y = bounds.floorY; v.y = Math.abs(v.y) * 0.5; }
       }
       // 水流拖拽（河流场景）：浸水时施加 (flow - vel_xz) * mass * 0.8
       if (flow && inWater) {

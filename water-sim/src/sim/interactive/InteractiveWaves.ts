@@ -141,6 +141,14 @@ export class InteractiveWaves {
   /** 设置水平流速（m/s）。河流场景用；flow=(0,0) 时等价于无流（默认）。 */
   setFlow(vx: number, vz: number) { this.flowU.value.set(vx, vz); }
 
+  /** 运行时调整波速（m/s）；自动重算 c²dt²/dx² 并钳制至 CFL 稳定上限 0.4。 */
+  setWaveSpeed(c: number) {
+    this.c2dt2U.value = Math.min((c * c * STEP * STEP) / (this.dx * this.dx), 0.4);
+  }
+
+  /** 运行时调整阻尼系数（每子步保留率）；0=无阻尼，0.02=常规海浪，0.05=快速衰减。 */
+  setDamping(d: number) { this.dampU.value = d; }
+
   /** 网格跟随目标，整格吸附避免重采样游移。
    * 注意：缓冲内容不随 origin 滚动搬运，已有波形会随网格整体平移——
    * 跟随点须选缓变锚（OrbitControls.target / 船位），勿用旋转中的相机位置。 */
