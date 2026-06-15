@@ -33,7 +33,7 @@ export class OceanScene implements WaterScene {
   private throwables!: Throwables;
   private boat!: Boat;
   private cellSize = 1; // 内层网格格距，由 createOceanGeometry 提供，相机吸附按此对齐
-  private params = { windSpeed: 10, windDirection: 30, amplitudeScale: 1, choppiness: 1.2 };
+  private params = { windSpeed: 10, windDirection: 30, amplitudeScale: 1, choppiness: 1.2, foamBias: 0.6 };
   private camMode = { follow: false }; // 相机模式：false=自由轨道，true=跟船
   private spawnSel: { kind: 'ball' | 'box' } = { kind: 'ball' };
   private downPos = new THREE.Vector2(); // 左键按下位置，pointerup 时区分单击/拖拽
@@ -48,6 +48,7 @@ export class OceanScene implements WaterScene {
   private createFFT() {
     const fft = new FFTWaves(OceanScene.FFT_N, this.spectrumParams());
     fft.choppyU.value = this.params.choppiness;
+    fft.foamBiasU.value = this.params.foamBias;
     return fft;
   }
 
@@ -149,6 +150,8 @@ export class OceanScene implements WaterScene {
     ctx.gui.add(this.params, 'amplitudeScale', 0.2, 2.5, 0.05).name('浪高').onFinishChange(rebuild);
     ctx.gui.add(this.params, 'choppiness', 0, 2.5, 0.05).name('尖锐度')
       .onChange((v: number) => { this.fft.choppyU.value = v; });
+    ctx.gui.add(this.params, 'foamBias', 0.1, 1.5, 0.05).name('泡沫阈值')
+      .onChange((v: number) => { this.fft.setFoamBias(v); });
     ctx.gui.add(this.spawnSel, 'kind', { 球: 'ball', 箱: 'box' }).name('投掷类型');
     ctx.gui.add({ 清空: () => this.throwables.clear() }, '清空');
     // 相机模式：跟船时禁用轨道控制（避免与跟随写位姿打架）；

@@ -10,8 +10,6 @@ export interface CascadeConfig {
   domainSize: number; // 米
 }
 
-const FOAM_JACOBIAN_BIAS = 0.6; // J < 0.6 起沫（波峰挤压判据）
-
 /**
  * 单级联 GPU FFT 海浪管线。每帧流程：
  * ① 频谱时变 h(k,t)，并打包位移谱 P = Dx + i·Dz
@@ -31,7 +29,7 @@ export class FFTCascade {
   private timeU = uniform(0);
   private choppyU: any;
 
-  constructor(N: number, cfg: CascadeConfig, params: SpectrumParams, choppyU: any) {
+  constructor(N: number, cfg: CascadeConfig, params: SpectrumParams, choppyU: any, foamBiasU: any) {
     this.domainSize = cfg.domainSize;
     this.choppyU = choppyU;
 
@@ -151,7 +149,7 @@ export class FFTCascade {
       const jzz = float(1).add(t.z.sub(b.z).div(2 * texel));
       const jxz = t.x.sub(b.x).div(2 * texel);
       const jac = jxx.mul(jzz).sub(jxz.mul(jxz));
-      const foam = float(FOAM_JACOBIAN_BIAS).sub(jac).max(0);
+      const foam = foamBiasU.sub(jac).max(0);
       textureStore(normalFoamTex, ivec2(ix, iz), vec4(n.x, n.y, n.z, foam));
     })().compute(NN);
 
@@ -190,15 +188,18 @@ function makeStorageTex(N: number): THREE.StorageTexture {
 
 /**
  * 多级联 FFT 海浪：默认 3 级联（大/中/小尺度叠加）。
- * 共享 choppy uniform，每帧顺序调度所有级联的 compute。
+ * 共享 choppyU / foamBiasU uniform，每帧顺序调度所有级联的 compute。
  */
 export class FFTWaves {
   readonly cascades: FFTCascade[];
   readonly choppyU = uniform(1.2);
+  readonly foamBiasU = uniform(0.6); // Jacobian 泡沫判据：J < foamBias 起沫
 
   constructor(N: number, params: SpectrumParams, domains: number[] = [250, 60, 15]) {
-    this.cascades = domains.map((d) => new FFTCascade(N, { domainSize: d }, params, this.choppyU));
+    this.cascades = domains.map((d) => new FFTCascade(N, { domainSize: d }, params, this.choppyU, this.foamBiasU));
   }
+
+  setFoamBias(v: number) { this.foamBiasU.value = v; }
 
   update(renderer: THREE.WebGPURenderer, time: number) {
     for (const c of this.cascades) c.update(renderer, time);
