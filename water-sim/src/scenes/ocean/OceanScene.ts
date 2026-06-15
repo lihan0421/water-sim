@@ -8,6 +8,7 @@ import { InteractiveWaves } from '../../sim/interactive/InteractiveWaves';
 import { GpuHeightMirror, WaterHeightField, type GridMapping } from '../../physics/HeightSampler';
 import { Throwables } from '../../entities/Throwables';
 import { Boat } from '../../entities/Boat';
+import { SplashParticles } from '../../effects/SplashParticles';
 import { createOceanGeometry } from './surfaceGeometry';
 import { createWaterMaterial } from './WaterMaterial';
 import { skyColor } from './skyNode';
@@ -39,6 +40,8 @@ export class OceanScene implements WaterScene {
   private heightFn!: (x: number, z: number) => number; // 复用闭包，避免每帧新建
   private camBack = new THREE.Vector3(); // 跟船相机暂存
   private camTarget = new THREE.Vector3();
+  private splash!: SplashParticles;
+  private bowSplashCooldown = 0; // 船首浪花节流（0.1s 间隔），防高速下 burst 过密
 
   private static readonly FFT_N = 256;
 
@@ -113,8 +116,16 @@ export class OceanScene implements WaterScene {
     ]);
     this.heightFn = (x, z) => this.heightField.height(x, z);
 
-    this.throwables = new Throwables(this.scene, this.interactive);
-    this.boat = new Boat(this.scene, this.interactive);
+    this.splash = new SplashParticles(this.scene);
+    this.throwables = new Throwables(this.scene, this.interactive,
+      (pos, speed) => this.splash.burst(this.ctx.renderer, pos, speed));
+    this.boat = new Boat(this.scene, this.interactive,
+      (pos, speed) => {
+        if (this.bowSplashCooldown <= 0) {
+          this.splash.burst(this.ctx.renderer, pos.clone(), speed);
+          this.bowSplashCooldown = 0.1;
+        }
+      });
 
     ctx.camera.position.set(0, 25, 60);
     ctx.camera.lookAt(0, 0, 0);
@@ -186,7 +197,9 @@ export class OceanScene implements WaterScene {
   };
 
   update(dt: number, time: number) {
+    this.bowSplashCooldown = Math.max(0, this.bowSplashCooldown - dt);
     this.fft.update(this.ctx.renderer, time);
+    this.splash.update(this.ctx.renderer, dt);
     // 顺序：fft → boat → follow → interactive → heightField.refresh → throwables
     // 船需在 interactive.follow 之前更新，但其激波扰动先入暂存队列，follow 更新 origin 后再换算格坐标（见 InteractiveWaves）
     this.boat.update(dt, this.heightFn);
@@ -221,6 +234,7 @@ export class OceanScene implements WaterScene {
   dispose() {
     this.ctx.domElement.removeEventListener('pointerdown', this.onPointerDown);
     this.ctx.domElement.removeEventListener('pointerup', this.onPointerUp);
+    this.splash.dispose();
     this.throwables.dispose();
     this.boat.dispose();
     this.controls.dispose();
