@@ -30,6 +30,7 @@ export class InteractiveWaves {
   readonly foamTex: THREE.StorageTexture;
   readonly origin = uniform(new THREE.Vector2(0, 0)); // 网格中心世界坐标（满足 WaterMaterial.InteractiveMaps）
   readonly heightBuffers: any[]; // ping-pong instancedArray，三缓冲轮换 prev/curr/next
+  private foamBuf: any;
   private computes: { step: any[]; export: any[] };
   private dPosU: any; private dValU: any; private dCountU = uniform(0, 'int'); // 扰动数量，int 作循环上界
   private c2dt2U = uniform(0.2); private dampU: any;
@@ -56,7 +57,8 @@ export class InteractiveWaves {
     const NN = this.N * this.N;
     const a = instancedArray(NN, 'float'), b = instancedArray(NN, 'float'), c = instancedArray(NN, 'float');
     this.heightBuffers = [a, b, c]; // prev, curr, next 轮换
-    const foamBuf = instancedArray(NN, 'float');
+    this.foamBuf = instancedArray(NN, 'float');
+    const foamBuf = this.foamBuf; // 闭包别名
     this.heightTex = makeTex(this.N); this.foamTex = makeTex(this.N);
     this.dPosU = uniformArray(Array.from({ length: MAX_DISTURB }, () => new THREE.Vector2()));
     this.dValU = uniformArray(Array.from({ length: MAX_DISTURB }, () => new THREE.Vector2()));
@@ -92,7 +94,8 @@ export class InteractiveWaves {
       const atC = (xx: any, zz: any) =>
         curr.element(clamp(zz, int(0), int(Nm1)).mul(Ni).add(clamp(xx, int(0), int(Nm1))));
       const h = bil(curr), hp = bil(prev);
-      const lap = atC(x.add(1), z).add(atC(x.sub(1), z)).add(atC(x, z.add(1))).add(atC(x, z.sub(1))).sub(h.mul(4));
+      // 拉普拉斯中心项用非平流的 curr[i]，避免 flow≠0 时产生一阶导数误差项导致振幅漂移
+      const lap = atC(x.add(1), z).add(atC(x.sub(1), z)).add(atC(x, z.add(1))).add(atC(x, z.sub(1))).sub(atC(x, z).mul(4));
       const vel = h.sub(hp).mul(float(1).sub(dampU));
       const out = h.add(vel).add(lap.mul(c2dt2U)).toVar();
 
@@ -106,11 +109,18 @@ export class InteractiveWaves {
       });
 
       If(edge, () => {
-        next.element(i).assign(
-          reflectB
-            ? atC(clamp(x, int(1), int(Nm2)), clamp(z, int(1), int(Nm2)))
-            : h.mul(0.5),
-        );
+        if (reflectB) {
+          // Neumann BC：边格复制内邻；角格取两轴内邻均值（避免对角 atC(1,1) 导致相位奇点）
+          const rnx = clamp(x, int(1), int(Nm2));
+          const rnz = clamp(z, int(1), int(Nm2));
+          const isCorner = x.equal(0).or(x.equal(int(Nm1))).and(z.equal(0).or(z.equal(int(Nm1))));
+          next.element(i).assign(isCorner.select(
+            atC(rnx, z).add(atC(x, rnz)).mul(0.5),
+            atC(rnx, rnz),
+          ));
+        } else {
+          next.element(i).assign(h.mul(0.5));
+        }
       }).Else(() => { next.element(i).assign(out); });
 
       const f = foamBuf.element(i);
@@ -197,6 +207,9 @@ export class InteractiveWaves {
     // compute 节点显式 dispose，避免场景/GUI 重建时 VRAM 堆积（与 FFTCascade 同纪律）
     for (const s of this.computes.step) s.dispose();
     for (const e of this.computes.export) e.dispose();
+    // GPU storage buffers：instancedArray 未显式 dispose 会在场景切换时永久泄漏 VRAM
+    for (const b of this.heightBuffers) b.dispose();
+    this.foamBuf.dispose();
     this.heightTex.dispose();
     this.foamTex.dispose();
   }

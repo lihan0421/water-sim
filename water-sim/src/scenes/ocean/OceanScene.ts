@@ -243,6 +243,7 @@ export class OceanScene implements WaterScene {
     this.controls.dispose();
     this.fft.dispose();
     this.interactive.dispose();
+    this.heightField.dispose();
     this.surface.geometry.dispose();
     this.skirt.geometry.dispose();
     (this.surface.material as THREE.Material).dispose();

@@ -28,19 +28,28 @@ export class FFTCascade {
   private computes: { update: any; passes: any[]; output: any; normals: any };
   private timeU = uniform(0);
   private choppyU: any;
+  private pingA: any;
+  private pingB: any;
+  private h0Buf: any;
+  private omegaBuf: any;
+  private bfBuf: any;
 
   constructor(N: number, cfg: CascadeConfig, params: SpectrumParams, choppyU: any, foamBiasU: any) {
     this.domainSize = cfg.domainSize;
     this.choppyU = choppyU;
 
     const { h0, omega } = generateInitialSpectrum(N, cfg.domainSize, params);
-    const h0Buf = attributeArray(h0, 'vec4');   // 静态只读
-    const omegaBuf = attributeArray(omega, 'float');
+    this.h0Buf = attributeArray(h0, 'vec4');   // 静态只读
+    this.omegaBuf = attributeArray(omega, 'float');
     const bfData = createButterflyData(N);
-    const bfBuf = attributeArray(bfData, 'vec4');
+    this.bfBuf = attributeArray(bfData, 'vec4');
 
-    const pingA = instancedArray(N * N, 'vec4'); // ping-pong 复数缓冲
-    const pingB = instancedArray(N * N, 'vec4');
+    this.pingA = instancedArray(N * N, 'vec4'); // ping-pong 复数缓冲
+    this.pingB = instancedArray(N * N, 'vec4');
+
+    // 局部别名供 Fn() 闭包捕获（闭包在构造时绑定，this.* 赋值后取别名等价）
+    const h0Buf = this.h0Buf, omegaBuf = this.omegaBuf, bfBuf = this.bfBuf;
+    const pingA = this.pingA, pingB = this.pingB;
     this.heightBuffer = instancedArray(N * N, 'float');
     this.displacementTex = makeStorageTex(N);
     this.normalFoamTex = makeStorageTex(N);
@@ -171,6 +180,13 @@ export class FFTCascade {
     for (const p of this.computes.passes) p.dispose();
     this.computes.output.dispose();
     this.computes.normals.dispose();
+    // GPU storage buffers（attributeArray / instancedArray）同样需要显式释放
+    this.pingA.dispose();
+    this.pingB.dispose();
+    this.h0Buf.dispose();
+    this.omegaBuf.dispose();
+    this.bfBuf.dispose();
+    this.heightBuffer.dispose();
     this.displacementTex.dispose();
     this.normalFoamTex.dispose();
   }

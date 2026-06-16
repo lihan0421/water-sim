@@ -82,6 +82,7 @@ export class GpuHeightMirror {
   data: Float32Array;
   private inFlight = false;
   private warnedOnce = false;
+  private disposed = false;
 
   constructor(
     private renderer: THREE.WebGPURenderer,
@@ -97,15 +98,19 @@ export class GpuHeightMirror {
     this.data = new Float32Array(N * N);
   }
 
+  /** 标记为已销毁；阻止后续 refresh 并使 in-flight 回调成为空操作 */
+  dispose() { this.disposed = true; }
+
   /** 每帧调用一次；fire-and-forget，不阻塞 */
   refresh() {
-    if (this.inFlight) return;
+    if (this.inFlight || this.disposed) return;
     this.inFlight = true;
     try {
       const node = this.bufferNode();
       const ab_promise: Promise<ArrayBuffer> = (this.renderer as any).getArrayBufferAsync(node.value);
       ab_promise
         .then((ab: ArrayBuffer) => {
+          if (this.disposed) return; // 场景已销毁，丢弃回读结果
           const expected = this.N * this.N * 4;
           if (ab.byteLength !== expected) {
             if (!this.warnedOnce) {
@@ -185,5 +190,10 @@ export class WaterHeightField {
   /** 每帧调用：向 GPU 发起所有层的异步回读请求 */
   refresh() {
     for (const l of this.layers) l.mirror.refresh();
+  }
+
+  /** 销毁所有 mirror，阻止 in-flight 回调写入已释放资源 */
+  dispose() {
+    for (const l of this.layers) l.mirror.dispose();
   }
 }

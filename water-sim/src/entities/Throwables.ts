@@ -65,6 +65,18 @@ export class Throwables {
       // 契约：applyForces 须在 step 前调用；重力由本处自加
       it.floater.applyForces(waterHeight, dt);
       it.body.applyForce(_g.set(0, -9.81 * it.body.mass, 0));
+      // 水流拖拽（河流场景）：须在 step 前施加，否则 step 清空 forceAcc 后力在下帧才生效（1 帧滞后）
+      if (flow) {
+        const whPre = waterHeight(it.body.position.x, it.body.position.z);
+        if (it.body.position.y - 0.2 < whPre) {
+          const dk = it.body.mass * 0.8;
+          it.body.applyForce(_fFlow.set(
+            (flow.x - it.body.velocity.x) * dk,
+            0,
+            (flow.z - it.body.velocity.z) * dk,
+          ));
+        }
+      }
       it.body.step(dt);
       // 入水检测 → 扰动 + 浪花回调（仅在由空中转入水、且有明显下落速度时触发一次）
       const wh = waterHeight(it.body.position.x, it.body.position.z);
@@ -82,15 +94,6 @@ export class Throwables {
         if (p.z < bounds.minZ) { p.z = bounds.minZ; v.z = Math.abs(v.z) * 0.5; }
         if (p.z > bounds.maxZ) { p.z = bounds.maxZ; v.z = -Math.abs(v.z) * 0.5; }
         if (p.y < bounds.floorY) { p.y = bounds.floorY; v.y = Math.abs(v.y) * 0.5; }
-      }
-      // 水流拖拽（河流场景）：浸水时施加 (flow - vel_xz) * mass * 0.8
-      if (flow && inWater) {
-        const dk = it.body.mass * 0.8;
-        it.body.applyForce(_fFlow.set(
-          (flow.x - it.body.velocity.x) * dk,
-          0,
-          (flow.z - it.body.velocity.z) * dk,
-        ));
       }
       it.wasAirborne = !inWater;
       it.mesh.position.copy(it.body.position);

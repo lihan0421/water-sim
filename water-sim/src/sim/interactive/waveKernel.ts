@@ -19,9 +19,18 @@ export function waveStep(prev: Float32Array, curr: Float32Array, next: Float32Ar
       const i = z * N + x;
       const edge = x === 0 || x === N - 1 || z === 0 || z === N - 1;
       if (edge) {
-        next[i] = p.boundary === 'reflect'
-          ? at(Math.min(Math.max(x, 1), N - 2), Math.min(Math.max(z, 1), N - 2)) // Neumann：复制内邻
-          : curr[i] * 0.5;  // absorb：强阻尼吸收
+        if (p.boundary === 'reflect') {
+          // Neumann BC：边格（非角）复制对应轴的内邻；角格取两轴内邻均值避免对角值导致相位奇点
+          const isXEdge = x === 0 || x === N - 1;
+          const isZEdge = z === 0 || z === N - 1;
+          if (isXEdge && isZEdge) {
+            next[i] = (at(Math.min(Math.max(x, 1), N - 2), z) + at(x, Math.min(Math.max(z, 1), N - 2))) / 2;
+          } else {
+            next[i] = at(Math.min(Math.max(x, 1), N - 2), Math.min(Math.max(z, 1), N - 2));
+          }
+        } else {
+          next[i] = curr[i] * 0.5;  // absorb：强阻尼吸收
+        }
         continue;
       }
       // 平流（半拉格朗日，双线性回溯）
@@ -36,7 +45,8 @@ export function waveStep(prev: Float32Array, curr: Float32Array, next: Float32Ar
         };
         h = bil(curr); hp = bil(prev);
       }
-      const lap = at(x + 1, z) + at(x - 1, z) + at(x, z + 1) + at(x, z - 1) - 4 * h;
+      // 拉普拉斯中心项用 curr[i]（非平流），避免 flow≠0 时混帧产生一阶导误差
+      const lap = at(x + 1, z) + at(x - 1, z) + at(x, z + 1) + at(x, z - 1) - 4 * curr[i];
       const vel = (h - hp) * (1 - p.damping);
       next[i] = h + vel + p.c2dt2 * lap;
     }

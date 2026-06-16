@@ -248,6 +248,7 @@ export class RiverScene implements WaterScene {
     this.controls.dispose();
     this.fft.dispose();
     this.interactive.dispose();
+    this.heightField.dispose();
     this.surfaceGeo.dispose();
     (this.surface.material as THREE.Material).dispose();
     this.bankMat.dispose();

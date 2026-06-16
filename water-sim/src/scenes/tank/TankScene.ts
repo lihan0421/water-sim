@@ -211,6 +211,7 @@ export class TankScene implements WaterScene {
     this.throwables.dispose();
     this.controls.dispose();
     this.interactive.dispose();
+    this.heightField.dispose();
     for (const g of this.geos) g.dispose();
     for (const m of this.mats) m.dispose();
     this.scene.background = null;

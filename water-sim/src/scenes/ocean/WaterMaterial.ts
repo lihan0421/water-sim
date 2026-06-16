@@ -63,16 +63,21 @@ export function createWaterMaterial(o: WaterMaterialOpts) {
     if (o.fft) for (const c of o.fft.cascades) {
       const nf = texture(c.normalFoamTex, wp.xz.div(c.domainSize));
       n = normalize(vec3(n.x.add(nf.x.mul(fftFade)), 1, n.z.add(nf.z.mul(fftFade))));
-      foam = foam.add(nf.w.mul(fftFade));
+      // 三级联各贡献最多 foamBias 量；除以级联数归一，防三叠后全场饱和为白色
+      foam = foam.add(nf.w.mul(fftFade).div(float(o.fft.cascades.length)));
     }
     if (o.interactive) {
       const i = o.interactive;
       const uvI = wp.xz.sub(i.origin).div(i.sizeMeters).add(0.5);
+      // 仅在网格范围内采样：越界时 ClampToEdge 读边缘陈旧值，会给全场景添加伪法线/泡沫
+      const inside = uvI.x.greaterThan(0.002).and(uvI.x.lessThan(0.998))
+        .and(uvI.y.greaterThan(0.002)).and(uvI.y.lessThan(0.998));
+      const mask = inside.select(float(1), float(0));
       const e = 1.5 / i.sizeMeters;
       const hl = texture(i.heightTex, uvI.sub(vec2(e, 0))).r, hr = texture(i.heightTex, uvI.add(vec2(e, 0))).r;
       const hb = texture(i.heightTex, uvI.sub(vec2(0, e))).r, ht = texture(i.heightTex, uvI.add(vec2(0, e))).r;
-      n = normalize(vec3(n.x.add(hl.sub(hr).mul(2)), 1, n.z.add(hb.sub(ht).mul(2))));
-      foam = foam.add(texture(i.foamTex, uvI).r);
+      n = normalize(vec3(n.x.add(hl.sub(hr).mul(2).mul(mask)), 1, n.z.add(hb.sub(ht).mul(2).mul(mask))));
+      foam = foam.add(texture(i.foamTex, uvI).r.mul(mask));
     }
     foam = clamp(foam, 0, 1);
 
